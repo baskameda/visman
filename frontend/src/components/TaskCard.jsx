@@ -5,9 +5,11 @@ import {
 } from '@mui/material'
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
-import ProcessFlowViz from './ProcessFlowViz'
+import ProcessFlowViz from './ProcessFlowViz.jsx'
+import { useTranslation } from 'react-i18next'
 
 export default function TaskCard({ task, variables, onAction, actionLabel, loading }) {
+  const { t } = useTranslation()
   const visitorName = variables?.VName ?? '—'
   const visitDate   = variables?.VDate
     ? new Date(variables.VDate).toLocaleDateString()
@@ -22,7 +24,7 @@ export default function TaskCard({ task, variables, onAction, actionLabel, loadi
       <CardContent sx={{ flexGrow: 1, pb: 1 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
           <Typography variant="subtitle1" fontWeight={700}>{task.name}</Typography>
-          <Chip label="Pending" color="warning" size="small" variant="outlined" />
+          <Chip label={t('taskCard.pending')} color="warning" size="small" variant="outlined" />
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mb: 2 }}>
@@ -31,7 +33,7 @@ export default function TaskCard({ task, variables, onAction, actionLabel, loadi
             {loading
               ? <Skeleton width={120} height={18} />
               : <Typography variant="body2" color="text.secondary">
-                  <strong>Visitor:</strong> {visitorName}
+                  <strong>{t('taskCard.visitor')}</strong> {visitorName}
                 </Typography>
             }
           </Box>
@@ -40,14 +42,14 @@ export default function TaskCard({ task, variables, onAction, actionLabel, loadi
             {loading
               ? <Skeleton width={100} height={18} />
               : <Typography variant="body2" color="text.secondary">
-                  <strong>Date:</strong> {visitDate}
+                  <strong>{t('taskCard.date')}</strong> {visitDate}
                 </Typography>
             }
           </Box>
           {variables?.reliability !== undefined && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" color="text.secondary" sx={{ ml: 3 }}>
-                <strong>Reliability:</strong>{' '}
+                <strong>{t('taskCard.reliability')}</strong>{' '}
                 <Chip
                   label={variables.reliability}
                   size="small"
@@ -73,7 +75,7 @@ export default function TaskCard({ task, variables, onAction, actionLabel, loadi
 
       <CardActions sx={{ px: 2, pb: 2, pt: 0 }}>
         <Button variant="contained" fullWidth onClick={() => onAction(task, variables)}>
-          {actionLabel ?? 'Complete'}
+          {actionLabel ?? t('taskCard.complete')}
         </Button>
       </CardActions>
     </Card>

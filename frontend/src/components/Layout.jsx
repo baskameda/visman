@@ -15,33 +15,36 @@ import SecurityIcon           from '@mui/icons-material/Security'
 import MeetingRoomIcon        from '@mui/icons-material/MeetingRoom'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import LanguageSwitcher from './LanguageSwitcher'
+import Tx from './Tx.jsx'
 import { useAuth } from '../context/AuthContext'
 
 const DRAWER_WIDTH     = 220
 const DRAWER_COLLAPSED = 64
 
-const ROLE_META = {
-  INVITER:    { label: 'Inviter',    color: '#1677ff', bg: '#e6f4ff', border: '#91caff' },
-  SECURITY:   { label: 'Security',   color: '#d46b08', bg: '#fff7e6', border: '#ffd591' },
-  GATEKEEPER: { label: 'Gatekeeper', color: '#531dab', bg: '#f9f0ff', border: '#d3adf7' },
-  ADMIN:      { label: 'Admin',      color: '#389e0d', bg: '#f6ffed', border: '#b7eb8f' },
+const ROLE_COLORS = {
+  INVITER:    { color: '#1677ff', bg: '#e6f4ff', border: '#91caff' },
+  SECURITY:   { color: '#d46b08', bg: '#fff7e6', border: '#ffd591' },
+  GATEKEEPER: { color: '#531dab', bg: '#f9f0ff', border: '#d3adf7' },
+  ADMIN:      { color: '#389e0d', bg: '#f6ffed', border: '#b7eb8f' },
 }
 
-const NAV = {
+const NAV_DEF = {
   INVITER:    [
-    { label: 'My Tasks', path: '/inviter',         Icon: AssignmentIcon },
-    { label: 'History',  path: '/inviter/history',  Icon: HistoryIcon   },
+    { key: 'nav.myTasks',    path: '/inviter',         Icon: AssignmentIcon },
+    { key: 'nav.history',    path: '/inviter/history',  Icon: HistoryIcon   },
   ],
-  SECURITY:   [{ label: 'My Tasks',   path: '/security',   Icon: SecurityIcon           }],
-  GATEKEEPER: [{ label: 'Gate Entry', path: '/gatekeeper', Icon: MeetingRoomIcon        }],
-  ADMIN:      [{ label: 'Dashboard',  path: '/admin',       Icon: AdminPanelSettingsIcon }],
+  SECURITY:   [{ key: 'nav.myTasks',   path: '/security',   Icon: SecurityIcon           }],
+  GATEKEEPER: [{ key: 'nav.gateEntry', path: '/gatekeeper', Icon: MeetingRoomIcon        }],
+  ADMIN:      [{ key: 'nav.dashboard', path: '/admin',       Icon: AdminPanelSettingsIcon }],
 }
 
 function NavItem({ item, active, collapsed, roleColor }) {
-  const effectiveColor = item.color ?? roleColor
   const navigate = useNavigate()
+  const { t } = useTranslation()
   return (
-    <Tooltip title={collapsed ? item.label : ''} placement="right">
+    <Tooltip title={collapsed ? t(item.key) : ''} placement="right">
       <ListItemButton
         onClick={() => navigate(item.path)}
         sx={{
@@ -49,16 +52,16 @@ function NavItem({ item, active, collapsed, roleColor }) {
           px: collapsed ? 0 : 1.25,
           justifyContent: collapsed ? 'center' : 'flex-start',
           position: 'relative',
-          color:  active ? effectiveColor : 'text.secondary',
-          bgcolor: active ? alpha(effectiveColor, 0.08) : 'transparent',
+          color:  active ? roleColor : 'text.secondary',
+          bgcolor: active ? alpha(roleColor, 0.08) : 'transparent',
           '&::before': active ? {
             content: '""', position: 'absolute',
             left: 0, top: '20%', height: '60%', width: 3,
-            borderRadius: '0 2px 2px 0', bgcolor: effectiveColor,
+            borderRadius: '0 2px 2px 0', bgcolor: roleColor,
           } : {},
           '&:hover': {
-            bgcolor: active ? alpha(effectiveColor, 0.12) : 'action.hover',
-            color: active ? effectiveColor : 'text.primary',
+            bgcolor: active ? alpha(roleColor, 0.12) : 'action.hover',
+            color: active ? roleColor : 'text.primary',
           },
           transition: 'all 0.15s ease',
         }}
@@ -68,7 +71,7 @@ function NavItem({ item, active, collapsed, roleColor }) {
         </ListItemIcon>
         {!collapsed && (
           <ListItemText
-            primary={item.label}
+            primary={<Tx k={item.key} />}
             primaryTypographyProps={{ fontSize: '0.857rem', fontWeight: active ? 700 : 500, lineHeight: 1.3 }}
           />
         )}
@@ -77,9 +80,10 @@ function NavItem({ item, active, collapsed, roleColor }) {
   )
 }
 
-function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location }) {
+function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location, editMode, onEditToggle }) {
   const navigate = useNavigate()
   const { logout } = useAuth()
+  const { t } = useTranslation()
   const initials = auth?.firstName
     ? auth.firstName.slice(0, 1).toUpperCase() + (auth.firstName.slice(1, 2) ?? '')
     : '?'
@@ -94,16 +98,22 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location }) 
         borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0,
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-          <Box sx={{
+          <Tooltip title={editMode ? 'Exit label edit' : 'Edit labels'} placement="right">
+          <Box onClick={onEditToggle} sx={{
             width: 28, height: 28, borderRadius: 1.5, flexShrink: 0,
-            background: `linear-gradient(135deg, ${meta.color} 0%, ${alpha(meta.color, 0.65)} 100%)`,
+            background: editMode ? 'linear-gradient(135deg,#d46b08,#fa8c16)' : `linear-gradient(135deg, ${meta.color} 0%, ${alpha(meta.color, 0.65)} 100%)`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: editMode ? '0 0 0 3px rgba(212,107,8,0.4)' : 'none',
+            transition: 'all 0.2s',
+            '&:hover': { opacity: 0.82, transform: 'scale(1.1)' },
           }}>
             <DashboardIcon sx={{ color: '#fff', fontSize: 15 }} />
           </Box>
+          </Tooltip>
           {!collapsed && (
             <Typography variant="subtitle2" sx={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              Visitor Mgmt
+              <Tx k='nav.visitorMgmt' />
             </Typography>
           )}
         </Box>
@@ -127,20 +137,11 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location }) 
       {/* Nav */}
       <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', py: 0.5 }}>
         <List dense disablePadding>
-          {navItems.map((item, idx) => (
-            <React.Fragment key={item.path}>
-              <NavItem
-                item={item}
-                active={location.pathname === item.path}
-                collapsed={collapsed}
-                roleColor={meta.color}
-              />
-              {item.isAdmin && navItems.length > 1 && (
-                <Box sx={{ mx: 1.5, my: 0.75 }}>
-                  <Box sx={{ height: '1px', bgcolor: 'divider' }} />
-                </Box>
-              )}
-            </React.Fragment>
+          {navItems.map(item => (
+            <NavItem key={item.path} item={item}
+              active={location.pathname === item.path}
+              collapsed={collapsed} roleColor={meta.color}
+            />
           ))}
         </List>
       </Box>
@@ -164,7 +165,7 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location }) 
             )}
           </Box>
           {!collapsed && (
-            <Tooltip title="Sign out">
+            <Tooltip title={t('nav.signOut')}>
               <IconButton size="small" onClick={() => { logout(); navigate('/login') }} sx={{
                 width: 28, height: 28, borderRadius: 1, border: '1px solid', borderColor: 'divider', flexShrink: 0,
                 '&:hover': { borderColor: 'error.main', color: 'error.main', bgcolor: '#fff2f0' },
@@ -175,7 +176,7 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location }) 
           )}
         </Box>
         {collapsed && (
-          <Tooltip title="Sign out" placement="right">
+          <Tooltip title={t('nav.signOut')} placement="right">
             <IconButton size="small" onClick={() => { logout(); navigate('/login') }}
               sx={{ mt: 0.75, width: '100%', borderRadius: 1, '&:hover': { color: 'error.main', bgcolor: '#fff2f0' } }}>
               <LogoutIcon sx={{ fontSize: 16 }} />
@@ -196,21 +197,33 @@ export default function Layout({ children }) {
   const [collapsed,        setCollapsed]        = useState(false)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
 
-  const role     = auth?.role ?? 'INVITER'
-  const meta     = ROLE_META[role] ?? ROLE_META.INVITER
-  const navItems = [
-    ...(auth?.isAlsoAdmin ? [{ label: 'Admin', path: '/admin', Icon: AdminPanelSettingsIcon, isAdmin: true, color: '#389e0d' }] : []),
-    ...(NAV[role] ?? []),
-  ]
-
-  const PAGE_TITLES = {
-    '/inviter':         'My Tasks',
-    '/inviter/history': 'Invitation History',
-    '/security':        'Security Review',
-    '/gatekeeper':      'Gate Entry',
-    '/admin':           'Administration',
+  const { t }   = useTranslation()
+  const [editMode, setEditMode] = useState(false)
+  const toggleEditMode = () => {
+    const next = !editMode
+    setEditMode(next)
+    window.__labelEditMode = next
+    window.dispatchEvent(new CustomEvent('labelEditModeChange', { detail: next }))
   }
-  const pageTitle = PAGE_TITLES[location.pathname] ?? 'Visitor Management'
+  const role    = auth?.role ?? 'INVITER'
+  const colors  = ROLE_COLORS[role] ?? ROLE_COLORS.INVITER
+  const meta    = { ...colors, label: t('roles.' + role) }
+  const navItems = (() => {
+    const base = NAV_DEF[role] ?? []
+    if (auth?.isAlsoAdmin && role !== 'ADMIN') {
+      return [{ key: 'nav.admin', path: '/admin', Icon: AdminPanelSettingsIcon, isAdmin: true, color: '#389e0d' }, ...base]
+    }
+    return base
+  })()
+
+  const PAGE_TITLE_KEYS = {
+    '/inviter':         'pageTitles.myTasks',
+    '/inviter/history': 'pageTitles.invitationHistory',
+    '/security':        'pageTitles.securityReview',
+    '/gatekeeper':      'pageTitles.gateEntry',
+    '/admin':           'pageTitles.administration',
+  }
+  const pageTitle = t(PAGE_TITLE_KEYS[location.pathname] ?? 'pageTitles.visitorManagement')
   const drawerWidth = isMobile ? DRAWER_WIDTH : (collapsed ? DRAWER_COLLAPSED : DRAWER_WIDTH)
 
   const drawerContent = (
@@ -218,6 +231,7 @@ export default function Layout({ children }) {
       collapsed={!isMobile && collapsed}
       onToggle={() => setCollapsed(c => !c)}
       auth={auth} meta={meta} navItems={navItems} location={location}
+      editMode={editMode} onEditToggle={toggleEditMode}
     />
   )
 
@@ -262,7 +276,7 @@ export default function Layout({ children }) {
               </IconButton>
             )}
             <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1rem', color: 'text.primary' }}>
-              {pageTitle}
+              <Tx k={PAGE_TITLE_KEYS[location.pathname] ?? "pageTitles.visitorManagement"} />
             </Typography>
             <Box sx={{ flex: 1 }} />
             <Chip label={meta.label} size="small" sx={{
@@ -270,6 +284,7 @@ export default function Layout({ children }) {
               fontWeight: 700, fontSize: '0.75rem', height: 22,
               display: { xs: 'none', sm: 'flex' },
             }} />
+            <LanguageSwitcher />
           </Toolbar>
         </AppBar>
 

@@ -1,9 +1,9 @@
-import en from "./locales/en.json"
-import de from "./locales/de.json"
-import it from "./locales/it.json"
-import fr from "./locales/fr.json"
-import zh from "./locales/zh.json"
-import ru from "./locales/ru.json"
+import en from "../../../../../../Downloads/label-edit-feature/src/i18n/locales/en.json"
+import de from "../../../../../../Downloads/label-edit-feature/src/i18n/locales/de.json"
+import it from "../../../../../../Downloads/label-edit-feature/src/i18n/locales/it.json"
+import fr from "../../../../../../Downloads/label-edit-feature/src/i18n/locales/fr.json"
+import zh from "../../../../../../Downloads/label-edit-feature/src/i18n/locales/zh.json"
+import ru from "../../../../../../Downloads/label-edit-feature/src/i18n/locales/ru.json"
 
 const BASE = { en, de, it, fr, zh, ru }
 

@@ -5,7 +5,7 @@ import {
 } from '@mui/material'
 import CheckIcon from '@mui/icons-material/Check'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import { LANGUAGES, setUserLang } from '../i18n'
+import { LANGUAGES, setUserLang } from '../i18n/index.js'
 import { useAuth } from '../context/AuthContext'
 
 export default function LanguageSwitcher() {

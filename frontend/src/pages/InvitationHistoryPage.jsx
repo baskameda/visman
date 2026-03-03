@@ -12,11 +12,12 @@ import Layout                 from '../components/Layout'
 import ProcessFlowViz         from '../components/ProcessFlowViz'
 import { useAuth }            from '../context/AuthContext'
 import { useTaskSSE }         from '../hooks/useTaskSSE'
+import { useTranslation }     from 'react-i18next'
 import { getHistoricProcesses, getHistoricVariables } from '../api/operatonApi'
 
-// ─── Single history card ──────────────────────────────────────────────────────
-
 function HistoryCard({ proc, vars, loading }) {
+  const { t } = useTranslation()
+
   if (loading) {
     return (
       <Card variant="outlined">
@@ -34,9 +35,9 @@ function HistoryCard({ proc, vars, loading }) {
     : 'active'
 
   const statusChip = {
-    completed: <Chip icon={<CheckCircleOutlineIcon />} label="Checked In" color="success" size="small" />,
-    refused:   <Chip icon={<BlockIcon />}              label="Refused"    color="error"   size="small" />,
-    active:    <Chip icon={<HourglassEmptyIcon />}     label="In Progress" color="primary" size="small" variant="outlined" />,
+    completed: <Chip icon={<CheckCircleOutlineIcon />} label=<Tx k='history.statusCheckedIn' /> color="success" size="small" />,
+    refused:   <Chip icon={<BlockIcon />}              label=<Tx k='history.statusRefused' />   color="error"   size="small" />,
+    active:    <Chip icon={<HourglassEmptyIcon />}     label=<Tx k='history.statusInProgress' /> color="primary" size="small" variant="outlined" />,
   }[outcome]
 
   return (
@@ -44,22 +45,22 @@ function HistoryCard({ proc, vars, loading }) {
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
           <Typography variant="subtitle2" fontWeight={700}>
-            {vars?.VName ?? 'Unnamed visitor'}
+            {vars?.VName ?? t('history.unnamedVisitor')}
           </Typography>
           {statusChip}
         </Box>
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 0.25 }}>
-          Planned: {vars?.VDate ? new Date(vars.VDate).toLocaleDateString() : '—'}
+          <Tx k='history.planned' /> {vars?.VDate ? new Date(vars.VDate).toLocaleDateString() : '—'}
         </Typography>
         {vars?.AVDate && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.25 }}>
-            Actual: {new Date(vars.AVDate).toLocaleDateString()}
+            <Tx k='history.actual' /> {new Date(vars.AVDate).toLocaleDateString()}
           </Typography>
         )}
         {vars?.reliability !== undefined && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.25 }}>
-            Reliability:{' '}
+            <Tx k='history.reliability' />{' '}
             <Chip
               label={vars.reliability}
               size="small"
@@ -70,8 +71,8 @@ function HistoryCard({ proc, vars, loading }) {
         )}
 
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-          Started: {new Date(proc.startTime).toLocaleString()}
-          {proc.endTime && <> · Ended: {new Date(proc.endTime).toLocaleString()}</>}
+          <Tx k='history.started' /> {new Date(proc.startTime).toLocaleString()}
+          {proc.endTime && <> · <Tx k='history.ended' /> {new Date(proc.endTime).toLocaleString()}</>}
         </Typography>
 
         <Divider sx={{ mb: 1.5 }} />
@@ -81,28 +82,23 @@ function HistoryCard({ proc, vars, loading }) {
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 export default function InvitationHistoryPage() {
   const { auth } = useAuth()
+  const { t }    = useTranslation()
 
   const [history, setHistory]         = useState([])
   const [historyVars, setHistoryVars] = useState({})
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState('')
   const [lastRefresh, setLastRefresh] = useState(null)
-
-  // Filters
-  const [search, setSearch]         = useState('')
-  const [statusFilter, setStatus]   = useState('all')
+  const [search, setSearch]           = useState('')
+  const [statusFilter, setStatus]     = useState('all')
 
   const loadHistory = useCallback(async () => {
     setError('')
     try {
       const procs = await getHistoricProcesses(auth)
       setHistory(procs)
-
-      // Incrementally load vars only for new processes
       const newIds = procs.filter(p => !historyVars[p.id]).map(p => p.id)
       if (newIds.length > 0) {
         const vMap = {}
@@ -111,38 +107,26 @@ export default function InvitationHistoryPage() {
         }))
         setHistoryVars(prev => ({ ...prev, ...vMap }))
       }
-
       setLastRefresh(new Date())
     } catch (e) {
-      setError('Failed to load history: ' + (e.message ?? 'unknown'))
-    } finally {
-      setLoading(false)
-    }
-  }, [auth, historyVars])
+      setError(t('history.failedToLoad', { error: e.message ?? 'unknown' }))
+    } finally { setLoading(false) }
+  }, [auth, historyVars, t])
 
-  // SSE: updates when a process completes or a new one starts
   useTaskSSE(loadHistory)
 
-  // ── Filter logic ────────────────────────────────────────────────────────────
   const filtered = history.filter(proc => {
     const vars    = historyVars[proc.id] ?? {}
     const name    = (vars.VName ?? '').toLowerCase()
     const matchSearch = !search || name.includes(search.toLowerCase())
-
-    const outcome = proc.state === 'COMPLETED'
-      ? (vars.checkedIn ? 'completed' : 'refused')
-      : 'active'
+    const outcome = proc.state === 'COMPLETED' ? (vars.checkedIn ? 'completed' : 'refused') : 'active'
     const matchStatus = statusFilter === 'all' || outcome === statusFilter
-
     return matchSearch && matchStatus
   })
 
-  // ── Counts for filter buttons ────────────────────────────────────────────────
   const counts = history.reduce((acc, proc) => {
     const vars    = historyVars[proc.id] ?? {}
-    const outcome = proc.state === 'COMPLETED'
-      ? (vars.checkedIn ? 'completed' : 'refused')
-      : 'active'
+    const outcome = proc.state === 'COMPLETED' ? (vars.checkedIn ? 'completed' : 'refused') : 'active'
     acc[outcome] = (acc[outcome] ?? 0) + 1
     return acc
   }, {})
@@ -151,22 +135,20 @@ export default function InvitationHistoryPage() {
     <Layout>
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
-      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, flexWrap: 'wrap', gap: 1 }}>
         <Box>
-          <Typography variant="h5">Invitation History</Typography>
+          <Typography variant="h5"><Tx k='history.title' /></Typography>
           <Typography variant="body2" color="text.secondary">
             {lastRefresh
-              ? `Live \u2022 ${history.length} total \u2022 updated ${lastRefresh.toLocaleTimeString()}`
-              : 'Loading\u2026'}
+              ? t('history.liveCount', { count: history.length, time: lastRefresh.toLocaleTimeString() })
+              : t('common.loading')}
           </Typography>
         </Box>
       </Box>
 
-      {/* Filters */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField
-          placeholder="Search visitor name…"
+          placeholder=<Tx k='history.searchPlaceholder' />
           value={search}
           onChange={e => setSearch(e.target.value)}
           size="small"
@@ -179,33 +161,29 @@ export default function InvitationHistoryPage() {
             ),
           }}
         />
-
         <ToggleButtonGroup
           value={statusFilter}
           exclusive
           onChange={(_, v) => v && setStatus(v)}
           size="small"
         >
-          <ToggleButton value="all">All ({history.length})</ToggleButton>
-          <ToggleButton value="active">In Progress ({counts.active ?? 0})</ToggleButton>
-          <ToggleButton value="completed">Checked In ({counts.completed ?? 0})</ToggleButton>
-          <ToggleButton value="refused">Refused ({counts.refused ?? 0})</ToggleButton>
+          <ToggleButton value="all">{t('history.filterAll', { count: history.length })}</ToggleButton>
+          <ToggleButton value="active">{t('history.filterInProgress', { count: counts.active ?? 0 })}</ToggleButton>
+          <ToggleButton value="completed">{t('history.filterCheckedIn', { count: counts.completed ?? 0 })}</ToggleButton>
+          <ToggleButton value="refused">{t('history.filterRefused', { count: counts.refused ?? 0 })}</ToggleButton>
         </ToggleButtonGroup>
       </Box>
 
-      {/* Cards */}
       {loading ? (
         <Grid container spacing={2}>
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <Grid item xs={12} sm={6} md={4} key={i}>
-              <HistoryCard loading />
-            </Grid>
+            <Grid item xs={12} sm={6} md={4} key={i}><HistoryCard loading /></Grid>
           ))}
         </Grid>
       ) : filtered.length === 0 ? (
         <Box sx={{ p: 6, textAlign: 'center', border: '2px dashed', borderColor: 'divider', borderRadius: 2 }}>
           <Typography color="text.secondary">
-            {search || statusFilter !== 'all' ? 'No invitations match your filters.' : 'No invitation history yet.'}
+            {search || statusFilter !== 'all' ? t('history.noMatch') : t('history.noHistory')}
           </Typography>
         </Box>
       ) : (

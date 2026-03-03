@@ -106,9 +106,7 @@
     "mediumRisk": "Risque moyen",
     "highRisk": "RISQUE ÉLEVÉ – Sera refusé",
     "exactValue": "Valeur exacte",
-    "submitReview": "Soumettre l’évaluation",
-    "failedToLoad": "Erreur de chargement : {{error}}",
-    "failedToSubmit": "Erreur d’envoi : {{error}}"
+    "submitReview": "Soumettre l’évaluation"
   },
   "gatekeeper": {
     "title": "Tableau de bord Gardien",

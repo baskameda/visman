@@ -1,12 +1,12 @@
-import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuth } from './context/AuthContext'
-import LoginPage             from './pages/LoginPage'
-import InviterDashboard      from './pages/InviterDashboard'
-import InvitationHistoryPage from './pages/InvitationHistoryPage'
-import SecurityDashboard     from './pages/SecurityDashboard'
-import GatekeeperDashboard   from './pages/GatekeeperDashboard'
-import AdminDashboard        from './pages/AdminDashboard'
+import React from "react"
+import { Routes, Route, Navigate } from "react-router-dom"
+import { useAuth } from "./context/AuthContext"
+import LoginPage             from "./pages/LoginPage"
+import InviterDashboard      from "./pages/InviterDashboard"
+import InvitationHistoryPage from "./pages/InvitationHistoryPage"
+import SecurityDashboard     from "./pages/SecurityDashboard"
+import GatekeeperDashboard   from "./pages/GatekeeperDashboard"
+import AdminDashboard        from "./pages/AdminDashboard"
 
 function RequireAuth({ children }) {
   const { auth } = useAuth()
@@ -16,13 +16,8 @@ function RequireAuth({ children }) {
 function RoleRedirect() {
   const { auth } = useAuth()
   if (!auth) return <Navigate to="/login" replace />
-  const routes = {
-    INVITER:    '/inviter',
-    SECURITY:   '/security',
-    GATEKEEPER: '/gatekeeper',
-    ADMIN:      '/admin',
-  }
-  return <Navigate to={routes[auth.role] ?? '/inviter'} replace />
+  const routes = { INVITER: "/inviter", SECURITY: "/security", GATEKEEPER: "/gatekeeper", ADMIN: "/admin" }
+  return <Navigate to={routes[auth.role] ?? "/inviter"} replace />
 }
 
 export default function App() {

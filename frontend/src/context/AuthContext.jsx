@@ -1,13 +1,21 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState } from "react"
+import i18n, { getUserLang } from "../i18n"
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [auth, setAuth] = useState(null)
-  // auth = { username, password, firstName, role: 'INVITER' | 'SECURITY' | 'GATEKEEPER' | 'ADMIN' }
 
-  const login = (credentials) => setAuth(credentials)
-  const logout = () => setAuth(null)
+  const login = (credentials) => {
+    const lang = getUserLang(credentials.username)
+    i18n.changeLanguage(lang)
+    setAuth(credentials)
+  }
+
+  const logout = () => {
+    i18n.changeLanguage('en')
+    setAuth(null)
+  }
 
   return (
     <AuthContext.Provider value={{ auth, login, logout }}>

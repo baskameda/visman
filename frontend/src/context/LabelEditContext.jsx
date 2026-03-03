@@ -6,8 +6,8 @@ import {
 import EditIcon    from '@mui/icons-material/Edit'
 import RestoreIcon from '@mui/icons-material/SettingsBackupRestore'
 import { useTranslation } from 'react-i18next'
-import { saveOverride, deleteOverride, getBaseValue, flatToNested, getOverrides } from '../i18n/overrides'
-import i18next from '../i18n'
+import { saveOverride, deleteOverride, getBaseValue, flatToNested, getOverrides } from '../i18n/overrides.js'
+import i18next from '../i18n/index.js'
 
 const LabelEditContext = createContext(null)
 

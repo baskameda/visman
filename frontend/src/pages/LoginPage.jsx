@@ -16,6 +16,8 @@ import CheckIcon              from '@mui/icons-material/Check'
 import { useNavigate }   from 'react-router-dom'
 import { useAuth }       from '../context/AuthContext'
 import { verifyIdentity, getUserGroups, getWebAdminUsers, createSuperheroAdmin } from '../api/operatonApi'
+import { useTranslation } from 'react-i18next'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 
 // ─── Role mapping ─────────────────────────────────────────────────────────────
 const GROUP_ROLE_MAP = {
@@ -26,10 +28,11 @@ const GROUP_ROLE_MAP = {
 }
 
 // ─── Demo accounts (non-admin – always shown) ─────────────────────────────────
+// roleKey maps to t('roles.INVITER') etc. — translated at render time
 const ROLE_ACCOUNTS = [
-  { username: 'inviter1',    password: 'inviter123',  role: 'Inviter'    },
-  { username: 'security1',   password: 'security123', role: 'Security'   },
-  { username: 'gatekeeper1', password: 'porter123',   role: 'Gatekeeper' },
+  { username: 'inviter1',    password: 'inviter123',  roleKey: 'INVITER'    },
+  { username: 'security1',   password: 'security123', roleKey: 'SECURITY'   },
+  { username: 'gatekeeper1', password: 'porter123',   roleKey: 'GATEKEEPER' },
 ]
 
 // ─── Credential badge inside the info dialog ──────────────────────────────────
@@ -68,6 +71,7 @@ export default function LoginPage() {
   const [error, setError]       = useState('')
   const { login }  = useAuth()
   const navigate   = useNavigate()
+  const { t }      = useTranslation()
 
   // Admin button state
   const [checkingAdmin, setCheckingAdmin]   = useState(true)   // true while probing webAdmins
@@ -100,7 +104,7 @@ export default function LoginPage() {
     try {
       const result = await verifyIdentity(username.trim(), password)
       if (!result.authenticated) {
-        setError('Invalid username or password.')
+        setError(t('login.invalidCredentials'))
         return
       }
       const credentials = { username: username.trim(), password }
@@ -113,12 +117,11 @@ export default function LoginPage() {
         if (groupIds.includes(groupId)) { role = r; break }
       }
 
-      const isAlsoAdmin = groupIds.includes('webAdmins') && role !== 'ADMIN'
-      login({ ...credentials, firstName: username.trim(), role, isAlsoAdmin })
+      login({ ...credentials, firstName: username.trim(), role })
       const routes = { INVITER: '/inviter', SECURITY: '/security', GATEKEEPER: '/gatekeeper', ADMIN: '/admin' }
       navigate(routes[role] ?? '/inviter')
     } catch (err) {
-      setError(err.response?.data?.message ?? 'Could not reach the server. Is the backend running?')
+      setError(err.response?.data?.message ?? t('login.serverError'))
     } finally {
       setLoading(false)
     }
@@ -150,7 +153,7 @@ export default function LoginPage() {
         try { await getWebAdminUsers().then(m => { setAdminAccounts(m); setHasAdminUser(m.length > 0) }) } catch {}
         setCreatedDialogOpen(true)
       } else {
-        setCreateError('Failed to create admin: ' + msg)
+        setCreateError(t('login.failedToCreate', { error: msg }))
       }
     } finally {
       setCreating(false)
@@ -164,35 +167,40 @@ export default function LoginPage() {
       alignItems: 'center', justifyContent: 'center',
       bgcolor: 'background.default', p: 2,
     }}>
+      {/* Language switcher - top right */}
+      <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
+        <LanguageSwitcher />
+      </Box>
+
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 4 }}>
         <SecurityIcon sx={{ fontSize: 40, color: 'primary.main' }} />
         <Box>
-          <Typography variant="h5" fontWeight={700} color="text.primary">Visitor Management</Typography>
-          <Typography variant="body2" color="text.secondary">Secure facility access portal</Typography>
+          <Typography variant="h5" fontWeight={700} color="text.primary">{t("login.title")}</Typography>
+          <Typography variant="body2" color="text.secondary">{t("login.subtitle")}</Typography>
         </Box>
       </Box>
 
       {/* Card */}
       <Card sx={{ width: '100%', maxWidth: 420 }}>
         <CardContent sx={{ p: 4 }}>
-          <Typography variant="h6" sx={{ mb: 0.5 }}>Sign in</Typography>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>{t("login.signIn")}</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Use your Operaton credentials
+            {t("login.useCredentials")}
           </Typography>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
           <Box component="form" onSubmit={handleLogin} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
-              label="Username" value={username} onChange={e => setUsername(e.target.value)}
+              label={t('login.username')} value={username} onChange={e => setUsername(e.target.value)}
               required fullWidth autoFocus
               InputProps={{ startAdornment: (
                 <InputAdornment position="start"><PersonIcon fontSize="small" color="action" /></InputAdornment>
               )}}
             />
             <TextField
-              label="Password" type={showPw ? 'text' : 'password'}
+              label={t('login.password')} type={showPw ? 'text' : 'password'}
               value={password} onChange={e => setPassword(e.target.value)}
               required fullWidth
               InputProps={{
@@ -209,13 +217,13 @@ export default function LoginPage() {
               }}
             />
             <Button type="submit" variant="contained" size="large" fullWidth disabled={loading} sx={{ mt: 1 }}>
-              {loading ? <CircularProgress size={22} color="inherit" /> : 'Sign in'}
+              {loading ? <CircularProgress size={22} color="inherit" /> : t('login.signIn')}
             </Button>
           </Box>
 
           {/* ── Quick-fill buttons ── */}
           <Divider sx={{ my: 3 }}>
-            <Typography variant="caption" color="text.secondary">Quick fill</Typography>
+            <Typography variant="caption" color="text.secondary">{t('login.quickFill')}</Typography>
           </Divider>
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -227,7 +235,7 @@ export default function LoginPage() {
                 <PersonIcon fontSize="small" />
                 <Box sx={{ textAlign: 'left' }}>
                   <Typography variant="body2" fontWeight={600}>{acc.username}</Typography>
-                  <Typography variant="caption" color="text.secondary">{acc.role}</Typography>
+                  <Typography variant="caption" color="text.secondary">{t('roles.' + acc.roleKey)}</Typography>
                 </Box>
               </Button>
             ))}
@@ -249,7 +257,7 @@ export default function LoginPage() {
                   <AdminPanelSettingsIcon fontSize="small" />
                   <Box sx={{ textAlign: 'left' }}>
                     <Typography variant="body2" fontWeight={600}>{u.id}</Typography>
-                    <Typography variant="caption" color="text.secondary">Admin</Typography>
+                    <Typography variant="caption" color="text.secondary">{t('roles.ADMIN')}</Typography>
                   </Box>
                 </Button>
               ))
@@ -265,8 +273,8 @@ export default function LoginPage() {
                   sx={{ justifyContent: 'flex-start', gap: 1 }}
                 >
                   <Box sx={{ textAlign: 'left' }}>
-                    <Typography variant="body2" fontWeight={600}>Create Admin User</Typography>
-                    <Typography variant="caption" color="text.secondary">No admin found in webAdmins</Typography>
+                    <Typography variant="body2" fontWeight={600}>{t('login.createAdminUser')}</Typography>
+                    <Typography variant="caption" color="text.secondary">{t('login.noAdminFound')}</Typography>
                   </Box>
                 </Button>
               </Box>
@@ -276,28 +284,27 @@ export default function LoginPage() {
       </Card>
 
       <Typography variant="caption" color="text.secondary" sx={{ mt: 3 }}>
-        Operaton Cockpit ·{' '}
+        {t('login.cockpitPrefix')} ·{' '}
         <a href="http://localhost:8080/operaton/app/cockpit" target="_blank" rel="noreferrer"
-          style={{ color: 'inherit' }}>Open admin UI</a>
+          style={{ color: 'inherit' }}>{t('login.cockpitLink')}</a>
       </Typography>
 
       {/* ── Created confirmation dialog ── */}
       <Dialog open={createdDialogOpen} onClose={() => setCreatedDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <AdminPanelSettingsIcon color="success" />
-          Admin User Created
+          {t('login.adminCreated')}
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
-            A new admin account has been created and added to the <Chip label="webAdmins" size="small" /> group.
-            Use the credentials below to sign in.
+            {t('login.adminCreatedDesc', { group: 'webAdmins' })}
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <CredBadge label="Username" value="superhero" />
-            <CredBadge label="Password" value="test123"   />
+            <CredBadge label={t('login.username')} value="superhero" />
+            <CredBadge label={t('login.password')} value="test123"   />
           </Box>
           <Alert severity="warning" sx={{ mt: 2.5 }} icon={false}>
-            Change this password after your first login.
+            {t('login.changePassword')}
           </Alert>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -308,9 +315,9 @@ export default function LoginPage() {
               fillAccount({ username: 'superhero', password: 'test123' })
             }}
           >
-            Fill & Sign In
+            {t('login.fillAndSignIn')}
           </Button>
-          <Button onClick={() => setCreatedDialogOpen(false)}>Dismiss</Button>
+          <Button onClick={() => setCreatedDialogOpen(false)}>{t("login.dismiss")}</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -7,21 +7,23 @@ import {
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser'
 import RefreshIcon      from '@mui/icons-material/Refresh'
 import Layout           from '../components/Layout'
+import Tx               from '../components/Tx'
 import TaskCard, { TaskCardSkeleton } from '../components/TaskCard'
 import ProcessFlowViz   from '../components/ProcessFlowViz'
 import { useAuth }      from '../context/AuthContext'
+import { useTranslation } from 'react-i18next'
 import { useTaskSSE } from '../hooks/useTaskSSE'
 import { getTasksByGroup, getProcessVariables, completeTask, claimTask } from '../api/operatonApi'
 
 export default function SecurityDashboard() {
   const { auth } = useAuth()
+  const { t }    = useTranslation()
 
   const [tasks, setTasks]         = useState([])
   const [taskVars, setTaskVars]   = useState({})
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
   const [lastRefresh, setLastRefresh] = useState(null)
-
   const [dialogOpen, setDialogOpen]   = useState(false)
   const [activeTask, setActiveTask]   = useState(null)
   const [reliability, setReliability] = useState(50)
@@ -33,16 +35,16 @@ export default function SecurityDashboard() {
       const all  = await getTasksByGroup(auth, 'Security')
       setTasks(all)
       const vars = {}
-      await Promise.all(all.map(async t => {
-        try { vars[t.id] = await getProcessVariables(auth, t.processInstanceId) }
-        catch { vars[t.id] = {} }
+      await Promise.all(all.map(async task => {
+        try { vars[task.id] = await getProcessVariables(auth, task.processInstanceId) }
+        catch { vars[task.id] = {} }
       }))
       setTaskVars(vars)
       setLastRefresh(new Date())
     } catch (e) {
-      setError('Failed to load: ' + (e.message ?? 'unknown'))
+      setError(t('security.failedToLoad', { error: e.message ?? 'unknown' }))
     } finally { setLoading(false) }
-  }, [auth])
+  }, [auth, t])
 
   useTaskSSE(loadTasks)
 
@@ -61,26 +63,26 @@ export default function SecurityDashboard() {
       setDialogOpen(false)
       await loadTasks()
     } catch (e) {
-      setError('Failed to submit: ' + (e.response?.data?.message ?? e.message))
+      setError(t('security.failedToSubmit', { error: e.response?.data?.message ?? e.message }))
     } finally { setSubmitting(false) }
   }
 
   const relColor = v => v > 60 ? 'success' : v > 30 ? 'warning' : 'error'
-  const relLabel = v => v > 60 ? 'Low Risk' : v > 30 ? 'Medium Risk' : 'HIGH RISK – Will be refused'
+  const relLabel = v => v > 60 ? t('security.lowRisk') : v > 30 ? t('security.mediumRisk') : t('security.highRisk')
   const activeVars = activeTask ? (taskVars[activeTask.id] ?? {}) : {}
 
   return (
-    <Layout title="">
+    <Layout>
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h5">Security Dashboard</Typography>
+          <Typography variant="h5"><Tx k='security.title' /></Typography>
           <Typography variant="body2" color="text.secondary">
-            {lastRefresh ? `Updated ${lastRefresh.toLocaleTimeString()} · auto-refreshes every 10s` : 'Loading…'}
+            {lastRefresh ? <Tx k='common.liveUpdated' vars={{ time: lastRefresh.toLocaleTimeString() }} /> : <Tx k='common.connecting' />}
           </Typography>
         </Box>
-        <Tooltip title="Refresh now">
+        <Tooltip title={t('common.refreshNow')}>
           <span>
             <Button variant="outlined" size="small" onClick={loadTasks} disabled={loading}>
               <RefreshIcon fontSize="small" />
@@ -90,7 +92,7 @@ export default function SecurityDashboard() {
       </Box>
 
       <Typography variant="subtitle1" sx={{ mb: 1.5 }}>
-        Pending Security Checks ({tasks.length})
+        <Tx k='security.pendingCount' vars={{ count: tasks.length }} />
       </Typography>
 
       {loading ? (
@@ -98,10 +100,9 @@ export default function SecurityDashboard() {
           {[1,2,3].map(i => <Grid item xs={12} sm={6} md={4} key={i}><TaskCardSkeleton /></Grid>)}
         </Grid>
       ) : tasks.length === 0 ? (
-        <Box sx={{ p: 4, textAlign: 'center', borderRadius: 2,
-                   border: '2px dashed', borderColor: 'divider' }}>
+        <Box sx={{ p: 4, textAlign: 'center', borderRadius: 2, border: '2px dashed', borderColor: 'divider' }}>
           <VerifiedUserIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-          <Typography color="text.secondary">No pending security checks.</Typography>
+          <Typography color="text.secondary"><Tx k='security.emptyState' /></Typography>
         </Box>
       ) : (
         <Grid container spacing={2}>
@@ -111,7 +112,7 @@ export default function SecurityDashboard() {
                 task={task}
                 variables={taskVars[task.id] ?? {}}
                 onAction={handleOpenDialog}
-                actionLabel="Review & Score"
+                actionLabel={t('security.actionLabel')}
                 loading={!taskVars[task.id]}
               />
             </Grid>
@@ -119,12 +120,11 @@ export default function SecurityDashboard() {
         </Grid>
       )}
 
-      {/* Security Review Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <VerifiedUserIcon color="warning" />
-            Security Review — {activeVars.VName ?? 'Visitor'}
+            <Tx k='security.dialogTitle' vars={{ name: activeVars.VName ?? t('common.visitor') }} />
           </Box>
         </DialogTitle>
         <DialogContent>
@@ -135,16 +135,13 @@ export default function SecurityDashboard() {
               visitorName={activeVars.VName}
             />
           </Box>
-
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Set the reliability score. A score of <strong>30 or below</strong> will automatically refuse the invitation.
+            <Tx k='security.dialogDesc' />
           </Typography>
-
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
           <Box sx={{ mb: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2" fontWeight={600}>Reliability Score</Typography>
+              <Typography variant="body2" fontWeight={600}><Tx k='security.reliabilityScore' /></Typography>
               <Chip label={`${reliability} — ${relLabel(reliability)}`}
                 color={relColor(reliability)} size="small" />
             </Box>
@@ -160,7 +157,7 @@ export default function SecurityDashboard() {
               color={relColor(reliability)}
             />
             <TextField
-              type="number" label="Exact value"
+              type="number" label={t('security.exactValue')}
               value={reliability}
               onChange={e => setReliability(Math.min(100, Math.max(0, Number(e.target.value))))}
               inputProps={{ min: 0, max: 100 }}
@@ -169,9 +166,9 @@ export default function SecurityDashboard() {
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDialogOpen(false)} disabled={submitting}>Cancel</Button>
+          <Button onClick={() => setDialogOpen(false)} disabled={submitting}>{t('common.cancel')}</Button>
           <Button variant="contained" color="warning" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? <CircularProgress size={20} color="inherit" /> : 'Submit Review'}
+            {submitting ? <CircularProgress size={20} color="inherit" /> : t('security.submitReview')}
           </Button>
         </DialogActions>
       </Dialog>

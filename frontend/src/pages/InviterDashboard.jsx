@@ -10,6 +10,7 @@ import RefreshIcon          from '@mui/icons-material/Refresh'
 import { DatePicker }       from '@mui/x-date-pickers'
 import dayjs                from 'dayjs'
 import Layout               from '../components/Layout'
+import Tx                   from '../components/Tx'
 import TaskCard, { TaskCardSkeleton } from '../components/TaskCard'
 import ProcessFlowViz       from '../components/ProcessFlowViz'
 import { useAuth }          from '../context/AuthContext'
@@ -106,7 +107,7 @@ export default function InviterDashboard() {
       {/* Action bar */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h5">Pending Invitations</Typography>
+          <Typography variant="h5"><Tx k="inviter.title" /></Typography>
           <Typography variant="body2" color="text.secondary">
             {lastRefresh
               ? `Live \u2022 updated ${lastRefresh.toLocaleTimeString()}`
@@ -143,7 +144,7 @@ export default function InviterDashboard() {
       ) : inviteTasks.length === 0 ? (
         <Box sx={{ p: 4, textAlign: 'center', borderRadius: 2, border: '2px dashed', borderColor: 'divider' }}>
           <PersonAddAltIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-          <Typography color="text.secondary">No pending forms. Start a new invitation above.</Typography>
+          <Typography color="text.secondary"><Tx k="inviter.emptyState" /></Typography>
         </Box>
       ) : (
         <Grid container spacing={2}>
@@ -186,7 +187,7 @@ export default function InviterDashboard() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)} disabled={submitting}>Cancel</Button>
+          <Button onClick={() => setDialogOpen(false)} disabled={submitting}><Tx k="common.cancel" /></Button>
           <Button variant="contained" onClick={handleSubmitInvite} disabled={submitting}>
             {submitting ? <CircularProgress size={20} color="inherit" /> : 'Submit Invitation'}
           </Button>

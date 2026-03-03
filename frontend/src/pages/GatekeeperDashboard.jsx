@@ -12,18 +12,19 @@ import Layout          from '../components/Layout'
 import TaskCard, { TaskCardSkeleton } from '../components/TaskCard'
 import ProcessFlowViz  from '../components/ProcessFlowViz'
 import { useAuth }     from '../context/AuthContext'
+import { useTranslation } from 'react-i18next'
 import { useTaskSSE } from '../hooks/useTaskSSE'
 import { getTasksByGroup, getProcessVariables, completeTask, claimTask } from '../api/operatonApi'
 
 export default function GatekeeperDashboard() {
   const { auth } = useAuth()
+  const { t }    = useTranslation()
 
   const [tasks, setTasks]         = useState([])
   const [taskVars, setTaskVars]   = useState({})
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
   const [lastRefresh, setLastRefresh] = useState(null)
-
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeTask, setActiveTask] = useState(null)
   const [avDate, setAvDate]         = useState(null)
@@ -35,16 +36,16 @@ export default function GatekeeperDashboard() {
       const all  = await getTasksByGroup(auth, 'Porters')
       setTasks(all)
       const vars = {}
-      await Promise.all(all.map(async t => {
-        try { vars[t.id] = await getProcessVariables(auth, t.processInstanceId) }
-        catch { vars[t.id] = {} }
+      await Promise.all(all.map(async task => {
+        try { vars[task.id] = await getProcessVariables(auth, task.processInstanceId) }
+        catch { vars[task.id] = {} }
       }))
       setTaskVars(vars)
       setLastRefresh(new Date())
     } catch (e) {
-      setError('Failed to load: ' + (e.message ?? 'unknown'))
+      setError(t('gatekeeper.failedToLoad', { error: e.message ?? 'unknown' }))
     } finally { setLoading(false) }
-  }, [auth])
+  }, [auth, t])
 
   useTaskSSE(loadTasks)
 
@@ -57,31 +58,33 @@ export default function GatekeeperDashboard() {
   }
 
   const handleSubmit = async () => {
-    if (!avDate) { setError('Please select the actual visit date.'); return }
+    if (!avDate) { setError(t('gatekeeper.selectDate')); return }
     setSubmitting(true); setError('')
     try {
       await completeTask(auth, activeTask.id, { AVDate: avDate.toISOString().split('T')[0] })
       setDialogOpen(false)
       await loadTasks()
     } catch (e) {
-      setError('Failed to submit: ' + (e.response?.data?.message ?? e.message))
+      setError(t('gatekeeper.failedToSubmit', { error: e.response?.data?.message ?? e.message }))
     } finally { setSubmitting(false) }
   }
 
   const activeVars = activeTask ? (taskVars[activeTask.id] ?? {}) : {}
 
   return (
-    <Layout title="">
+    <Layout>
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h5">Gatekeeper Dashboard</Typography>
+          <Typography variant="h5"><Tx k='gatekeeper.title' /></Typography>
           <Typography variant="body2" color="text.secondary">
-            {lastRefresh ? `Updated ${lastRefresh.toLocaleTimeString()} · auto-refreshes every 10s` : 'Loading…'}
+            {lastRefresh
+              ? t('common.liveUpdated', { time: lastRefresh.toLocaleTimeString() })
+              : t('common.connecting')}
           </Typography>
         </Box>
-        <Tooltip title="Refresh now">
+        <Tooltip title=<Tx k='common.refreshNow' />>
           <span>
             <Button variant="outlined" size="small" onClick={loadTasks} disabled={loading}>
               <RefreshIcon fontSize="small" />
@@ -91,7 +94,7 @@ export default function GatekeeperDashboard() {
       </Box>
 
       <Typography variant="subtitle1" sx={{ mb: 1.5 }}>
-        Visitors Awaiting Entry ({tasks.length})
+        {t('gatekeeper.visitorsCount', { count: tasks.length })}
       </Typography>
 
       {loading ? (
@@ -99,10 +102,9 @@ export default function GatekeeperDashboard() {
           {[1,2].map(i => <Grid item xs={12} sm={6} md={4} key={i}><TaskCardSkeleton /></Grid>)}
         </Grid>
       ) : tasks.length === 0 ? (
-        <Box sx={{ p: 4, textAlign: 'center', borderRadius: 2,
-                   border: '2px dashed', borderColor: 'divider' }}>
+        <Box sx={{ p: 4, textAlign: 'center', borderRadius: 2, border: '2px dashed', borderColor: 'divider' }}>
           <MeetingRoomIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-          <Typography color="text.secondary">No visitors awaiting entry.</Typography>
+          <Typography color="text.secondary"><Tx k='gatekeeper.emptyState' /></Typography>
         </Box>
       ) : (
         <Grid container spacing={2}>
@@ -112,7 +114,7 @@ export default function GatekeeperDashboard() {
                 task={task}
                 variables={taskVars[task.id] ?? {}}
                 onAction={handleOpenDialog}
-                actionLabel="Allow Entry"
+                actionLabel=<Tx k='gatekeeper.actionLabel' />
                 loading={!taskVars[task.id]}
               />
             </Grid>
@@ -120,12 +122,11 @@ export default function GatekeeperDashboard() {
         </Grid>
       )}
 
-      {/* Allow Visit Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <MeetingRoomIcon color="success" />
-            Allow Entry — {activeVars.VName ?? 'Visitor'}
+            {t('gatekeeper.dialogTitle', { name: activeVars.VName ?? t('common.visitor') })}
           </Box>
         </DialogTitle>
         <DialogContent>
@@ -136,28 +137,25 @@ export default function GatekeeperDashboard() {
               visitorName={activeVars.VName}
             />
           </Box>
-
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-            Reliability score: <strong>{activeVars.reliability ?? '—'}</strong>
-            &nbsp;·&nbsp; Planned date: <strong>
+            <Tx k='gatekeeper.reliabilityScore' /> <strong>{activeVars.reliability ?? '—'}</strong>
+            &nbsp;·&nbsp; <Tx k='gatekeeper.plannedDate' /> <strong>
               {activeVars.VDate ? new Date(activeVars.VDate).toLocaleDateString() : '—'}
             </strong>
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Confirm the visitor's actual arrival date to complete check-in.
+            <Tx k='gatekeeper.confirmDesc' />
           </Typography>
-
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
           <DatePicker
-            label="Actual Visit Date" value={avDate} onChange={setAvDate}
+            label=<Tx k='gatekeeper.actualVisitDate' /> value={avDate} onChange={setAvDate}
             slotProps={{ textField: { fullWidth: true, required: true } }}
           />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDialogOpen(false)} disabled={submitting}>Cancel</Button>
+          <Button onClick={() => setDialogOpen(false)} disabled={submitting}><Tx k='common.cancel' /></Button>
           <Button variant="contained" color="success" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? <CircularProgress size={20} color="inherit" /> : 'Confirm Check-In'}
+            {submitting ? <CircularProgress size={20} color="inherit" /> : t('gatekeeper.confirmCheckIn')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -7,6 +7,7 @@ import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1'
 import SecurityIcon      from '@mui/icons-material/Security'
 import MeetingRoomIcon   from '@mui/icons-material/MeetingRoom'
 import HowToRegIcon      from '@mui/icons-material/HowToReg'
+import { useTranslation } from 'react-i18next'
 
 const pulseRing = keyframes`
   0%   { transform: scale(1);   opacity: 0.7; }
@@ -18,38 +19,20 @@ const fadeSlideIn = keyframes`
   to   { opacity: 1; transform: translateY(0);   }
 `
 
-// ─── Step definitions ─────────────────────────────────────────────────────────
-
-export const FLOW_STEPS = [
-  {
-    id: 'invite', taskKey: 'Activity_0fze1aq',
-    label: 'Invitation', sublabel: 'Invitors',
-    color: '#2563eb', glow: 'rgba(37,99,235,0.35)', track: '#bfdbfe',
-    Icon: PersonAddAlt1Icon,
-  },
-  {
-    id: 'security', taskKey: 'Activity_1ntxaf8',
-    label: 'Security', sublabel: 'Security',
-    color: '#d97706', glow: 'rgba(217,119,6,0.35)', track: '#fde68a',
-    Icon: SecurityIcon,
-  },
-  {
-    id: 'gate', taskKey: 'Activity_03g8gtv',
-    label: 'Gate Entry', sublabel: 'Porters',
-    color: '#7c3aed', glow: 'rgba(124,58,237,0.35)', track: '#ddd6fe',
-    Icon: MeetingRoomIcon,
-  },
-  {
-    id: 'checkin', taskKey: 'Activity_15y888q',
-    label: 'Checked In', sublabel: 'Automated',
-    color: '#059669', glow: 'rgba(5,150,105,0.35)', track: '#a7f3d0',
-    Icon: HowToRegIcon,
-  },
+// Step definitions – labels are resolved via i18n keys at render time
+const FLOW_STEP_DEFS = [
+  { id: 'invite',   taskKey: 'Activity_0fze1aq', labelKey: 'flow.invite_label',   sublabelKey: 'flow.invite_sublabel',   color: '#2563eb', glow: 'rgba(37,99,235,0.35)',  track: '#bfdbfe', Icon: PersonAddAlt1Icon },
+  { id: 'security', taskKey: 'Activity_1ntxaf8', labelKey: 'flow.security_label', sublabelKey: 'flow.security_sublabel', color: '#d97706', glow: 'rgba(217,119,6,0.35)',   track: '#fde68a', Icon: SecurityIcon      },
+  { id: 'gate',     taskKey: 'Activity_03g8gtv', labelKey: 'flow.gate_label',     sublabelKey: 'flow.gate_sublabel',     color: '#7c3aed', glow: 'rgba(124,58,237,0.35)',  track: '#ddd6fe', Icon: MeetingRoomIcon   },
+  { id: 'checkin',  taskKey: 'Activity_15y888q', labelKey: 'flow.checkin_label',  sublabelKey: 'flow.checkin_sublabel',  color: '#059669', glow: 'rgba(5,150,105,0.35)',   track: '#a7f3d0', Icon: HowToRegIcon      },
 ]
 
 export const TASK_KEY_TO_STEP = Object.fromEntries(
-  FLOW_STEPS.map((s, i) => [s.taskKey, i])
+  FLOW_STEP_DEFS.map((s, i) => [s.taskKey, i])
 )
+
+// Keep exported FLOW_STEPS for any callers that need it (task keys only)
+export const FLOW_STEPS = FLOW_STEP_DEFS
 
 function resolveStepStatus(stepIndex, activeStepIndex, outcome) {
   if (outcome === 'completed') return 'completed'
@@ -63,11 +46,7 @@ function resolveStepStatus(stepIndex, activeStepIndex, outcome) {
   return 'pending'
 }
 
-// ─── Node  (sizes increased 40%) ─────────────────────────────────────────────
-// compact: 32 → 45 px,  icon 14 → 20 px
-// full:    44 → 62 px,  icon 20 → 28 px
-
-function StepNode({ step, status, compact }) {
+function StepNode({ step, status, compact, label, sublabel }) {
   const size   = compact ? 45 : 62
   const iconSz = compact ? 20 : 28
 
@@ -87,7 +66,7 @@ function StepNode({ step, status, compact }) {
     : <step.Icon sx={{ fontSize: iconSz, color: iconColor }} />
 
   return (
-    <Tooltip title={`${step.label} (${step.sublabel})`} disableHoverListener={!compact}>
+    <Tooltip title={compact ? `${label} (${sublabel})` : ''} disableHoverListener={!compact}>
       <Box sx={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75,
         animation: `${fadeSlideIn} 0.35s ease both`,
@@ -127,24 +106,14 @@ function StepNode({ step, status, compact }) {
                    : 'text.secondary',
               fontSize: '0.72rem', lineHeight: 1.2, display: 'block',
             }}>
-              {step.label}
+              {label}
             </Typography>
-            {status === 'active' && (
-              <Chip label="NOW" size="small" sx={{
-                mt: 0.3, height: 16, fontSize: '0.62rem', fontWeight: 700,
-                backgroundColor: step.color, color: '#fff',
-                '& .MuiChip-label': { px: 0.8 },
-              }} />
-            )}
           </Box>
         )}
       </Box>
     </Tooltip>
   )
 }
-
-// ─── Connector (height also scaled 40%) ──────────────────────────────────────
-// compact: 3 → 4 px,  full: 4 → 6 px
 
 function Connector({ leftStatus, rightStatus, leftStep, rightStep, compact }) {
   const height = compact ? 4 : 6
@@ -172,33 +141,34 @@ function Connector({ leftStatus, rightStatus, leftStep, rightStep, compact }) {
   )
 }
 
-// ─── Public component ─────────────────────────────────────────────────────────
-
 export default function ProcessFlowViz({
   currentTaskKey,
   outcome = 'active',
   compact = false,
   visitorName,
 }) {
+  const { t } = useTranslation()
+
   const activeStepIndex = currentTaskKey !== undefined
     ? (TASK_KEY_TO_STEP[currentTaskKey] ?? -1)
-    : outcome === 'completed' ? FLOW_STEPS.length
+    : outcome === 'completed' ? FLOW_STEP_DEFS.length
     : -1
 
-  const stepStatuses = FLOW_STEPS.map((_, i) =>
+  const stepStatuses = FLOW_STEP_DEFS.map((_, i) =>
     resolveStepStatus(i, activeStepIndex, outcome)
   )
 
   if (compact) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', py: 0.5 }}>
-        {FLOW_STEPS.map((step, i) => (
+        {FLOW_STEP_DEFS.map((step, i) => (
           <React.Fragment key={step.id}>
-            <StepNode step={step} status={stepStatuses[i]} compact />
-            {i < FLOW_STEPS.length - 1 && (
+            <StepNode step={step} status={stepStatuses[i]} compact
+              label={t(step.labelKey)} sublabel={t(step.sublabelKey)} />
+            {i < FLOW_STEP_DEFS.length - 1 && (
               <Connector
                 leftStatus={stepStatuses[i]} rightStatus={stepStatuses[i + 1]}
-                leftStep={FLOW_STEPS[i]}     rightStep={FLOW_STEPS[i + 1]}
+                leftStep={FLOW_STEP_DEFS[i]} rightStep={FLOW_STEP_DEFS[i + 1]}
                 compact
               />
             )}
@@ -223,15 +193,15 @@ export default function ProcessFlowViz({
           color: 'rgba(255,255,255,0.5)', fontWeight: 600,
           letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '0.65rem',
         }}>
-          Process Flow
+          {t('flow.processFlow')}
         </Typography>
         {outcome === 'completed' && (
-          <Chip label="✓ Completed" size="small" sx={{
+          <Chip label={t('flow.completed')} size="small" sx={{
             bgcolor: '#059669', color: '#fff', fontWeight: 700, fontSize: '0.65rem', height: 18,
           }} />
         )}
         {outcome === 'refused' && (
-          <Chip label="✗ Refused" size="small" sx={{
+          <Chip label={t('flow.refused')} size="small" sx={{
             bgcolor: '#dc2626', color: '#fff', fontWeight: 700, fontSize: '0.65rem', height: 18,
           }} />
         )}
@@ -243,13 +213,14 @@ export default function ProcessFlowViz({
       </Box>
 
       <Box sx={{ px: 3, py: 3, display: 'flex', alignItems: 'flex-start' }}>
-        {FLOW_STEPS.map((step, i) => (
+        {FLOW_STEP_DEFS.map((step, i) => (
           <React.Fragment key={step.id}>
-            <StepNode step={step} status={stepStatuses[i]} compact={false} />
-            {i < FLOW_STEPS.length - 1 && (
+            <StepNode step={step} status={stepStatuses[i]} compact={false}
+              label={t(step.labelKey)} sublabel={t(step.sublabelKey)} />
+            {i < FLOW_STEP_DEFS.length - 1 && (
               <Connector
                 leftStatus={stepStatuses[i]} rightStatus={stepStatuses[i + 1]}
-                leftStep={FLOW_STEPS[i]}     rightStep={FLOW_STEPS[i + 1]}
+                leftStep={FLOW_STEP_DEFS[i]}  rightStep={FLOW_STEP_DEFS[i + 1]}
                 compact={false}
               />
             )}
