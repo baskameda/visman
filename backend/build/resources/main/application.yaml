@@ -1,0 +1,70 @@
+server:
+  port: 8080
+
+# =============================================================================
+# DataSource – SQL Server
+# Replace the password below with your actual SA / application-user password.
+# For production: set encrypt: true and trustServerCertificate: false
+# =============================================================================
+spring:
+  main:
+    allow-bean-definition-overriding: true
+
+  datasource:
+    url: jdbc:sqlserver://localhost:1433;databaseName=visitor_db;encrypt=false;trustServerCertificate=true
+    username: sa
+    password: YourPassword123!
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  # ===========================================================================
+  # Liquibase – application-level schema changelogs
+  # Operaton manages its own tables (ACT_*, HI_*, etc.) internally.
+  # ===========================================================================
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+    enabled: true
+
+# =============================================================================
+# Operaton BPM Engine
+# =============================================================================
+operaton:
+  bpm:
+    # ── Admin user (Cockpit / Tasklist / Admin UI) ──────────────────────────
+    admin-user:
+      id: admin
+      password: admin
+      first-name: Admin
+      last-name: User
+      email: admin@visitor-poc.local
+
+    # ── Database ─────────────────────────────────────────────────────────────
+    database:
+      type: mssql
+      schema-update: true
+
+    # ── Process deployment ───────────────────────────────────────────────────
+    auto-deployment-enabled: true
+
+    # ── History ──────────────────────────────────────────────────────────────
+    history-level: full
+
+    # ── Async job executor ───────────────────────────────────────────────────
+    job-execution:
+      enabled: true
+
+    # ── REST API path ────────────────────────────────────────────────────────
+    rest:
+      path: /engine-rest
+
+# =============================================================================
+# Logging
+# =============================================================================
+logging:
+  level:
+    org.operaton: INFO
+    eu.poc.claude: DEBUG
+    liquibase: INFO

@@ -1,0 +1,52 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.9'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'eu.poc.claude'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    // Operaton 1.x is the successor of Camunda 7 – fully on Maven Central
+    operatonVersion = '1.0.0-beta-5'
+}
+
+dependencies {
+    // ── Operaton Spring Boot Starters ────────────────────────────────────────
+    // Explicit versions required (Operaton does not publish a Gradle BOM)
+    implementation "org.operaton.bpm.springboot:operaton-bpm-spring-boot-starter:${operatonVersion}"
+    implementation "org.operaton.bpm.springboot:operaton-bpm-spring-boot-starter-rest:${operatonVersion}"
+    implementation "org.operaton.bpm.springboot:operaton-bpm-spring-boot-starter-webapp:${operatonVersion}"
+
+    // JAXB – required by the Operaton engine on Java 11+ (removed from JDK)
+    implementation 'com.sun.xml.bind:jaxb-impl:4.0.3'
+
+    // ── Spring Boot (versions managed by the Spring Boot BOM via the plugin) ─
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // ── Liquibase ─────────────────────────────────────────────────────────────
+    implementation 'org.liquibase:liquibase-core'
+
+    // ── SQL Server JDBC Driver ────────────────────────────────────────────────
+    runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11'
+
+    // ── Test ──────────────────────────────────────────────────────────────────
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+test {
+    useJUnitPlatform()
+}
