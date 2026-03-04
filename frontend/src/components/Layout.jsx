@@ -5,9 +5,14 @@ import {
   ListItemIcon, ListItemText, useMediaQuery, useTheme,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
+import Collapse from '@mui/material/Collapse'
 import MenuIcon               from '@mui/icons-material/Menu'
 import MenuOpenIcon           from '@mui/icons-material/MenuOpen'
 import LogoutIcon             from '@mui/icons-material/Logout'
+import ArticleIcon            from '@mui/icons-material/Article'
+import ExpandMoreIcon         from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon         from '@mui/icons-material/ExpandLess'
+import MenuBookIcon           from '@mui/icons-material/MenuBook'
 import DashboardIcon          from '@mui/icons-material/Dashboard'
 import AssignmentIcon         from '@mui/icons-material/Assignment'
 import HistoryIcon            from '@mui/icons-material/History'
@@ -17,7 +22,11 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from './LanguageSwitcher'
-import Tx from './Tx.jsx'
+import DevLogsModal    from './DevLogsModal'
+import TechDocsModal   from './TechDocsModal'
+import SupportDocsModal from './SupportDocsModal'
+import SalesDocsModal   from './SalesDocsModal'
+import Tx from './Tx'
 import { useAuth } from '../context/AuthContext'
 
 const DRAWER_WIDTH     = 220
@@ -84,6 +93,11 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location, ed
   const navigate = useNavigate()
   const { logout } = useAuth()
   const { t } = useTranslation()
+  const [devLogsOpen, setDevLogsOpen] = React.useState(false)
+  const [docsOpen, setDocsOpen] = React.useState(false)
+  const [techOpen, setTechOpen] = React.useState(false)
+  const [supportOpen, setSupportOpen] = React.useState(false)
+  const [salesOpen, setSalesOpen] = React.useState(false)
   const initials = auth?.firstName
     ? auth.firstName.slice(0, 1).toUpperCase() + (auth.firstName.slice(1, 2) ?? '')
     : '?'
@@ -146,6 +160,62 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location, ed
         </List>
       </Box>
 
+      {/* Dev Logs */}
+      {!collapsed && (
+        <Box sx={{ px: 1.5, pb: 0.5 }}>
+          <Box
+            onClick={() => setDevLogsOpen(true)}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1,
+              px: 1.25, py: 0.75, borderRadius: 1.5,
+              cursor: 'pointer', color: 'text.secondary',
+              '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
+            }}
+          >
+            <ArticleIcon sx={{ fontSize: 16 }} />
+            <Typography variant='body2' sx={{ fontSize: '0.857rem', fontWeight: 500 }}>Dev. Logs</Typography>
+          </Box>
+        </Box>
+      )}
+
+      {/* Documentation accordion */}
+      {!collapsed && (
+        <Box sx={{ px: 1.5, pb: 0.5 }}>
+          <Box
+            onClick={() => setDocsOpen(o => !o)}
+            sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              px: 1.25, py: 0.75, borderRadius: 1.5,
+              cursor: 'pointer', color: 'text.secondary',
+              '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <MenuBookIcon sx={{ fontSize: 16 }} />
+              <Typography variant='body2' sx={{ fontSize: '0.857rem', fontWeight: 500 }}>Documentation</Typography>
+            </Box>
+            {docsOpen ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
+          </Box>
+          <Collapse in={docsOpen}>
+            <Box sx={{ pl: 2 }}>
+              {[
+                { label: 'Tech Documentation',         action: () => setTechOpen(true) },
+                { label: 'Support Documentation',      action: () => setSupportOpen(true) },
+                { label: 'Sales & Marketing',          action: () => setSalesOpen(true) },
+              ].map(({ label, action }) => (
+                <Box key={label} onClick={action} sx={{
+                  px: 1.25, py: 0.5, borderRadius: 1.5, cursor: 'pointer',
+                  fontSize: '0.8rem', color: 'text.secondary',
+                  '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
+                }}>
+                  <Typography variant='body2' sx={{ fontSize: '0.8rem' }}>{label}</Typography>
+                </Box>
+              ))}
+            </Box>
+          </Collapse>
+        </Box>
+      )}
+
       {/* User + logout */}
       <Box sx={{ borderTop: '1px solid', borderColor: 'divider', p: collapsed ? '0.75rem 0' : '0.75rem', flexShrink: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', gap: 1 }}>
@@ -184,6 +254,10 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location, ed
           </Tooltip>
         )}
       </Box>
+      <DevLogsModal open={devLogsOpen} onClose={() => setDevLogsOpen(false)} />
+      <TechDocsModal open={techOpen} onClose={() => setTechOpen(false)} />
+      <SupportDocsModal open={supportOpen} onClose={() => setSupportOpen(false)} />
+      <SalesDocsModal open={salesOpen} onClose={() => setSalesOpen(false)} />
     </Box>
   )
 }
