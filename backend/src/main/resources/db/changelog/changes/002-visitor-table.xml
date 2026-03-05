@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Changeset 002: Visitor Registry
+        =================================
+        Stores visitor details created by inviters.
+        Each visitor is owned by the inviter who created it (created_by).
+        Search is scoped to the owning inviter — other inviters cannot see
+        visitors they did not create themselves.
+    -->
+    <changeSet id="002-visitor-table" author="visitor-poc">
+        <comment>Create poc_visitor table to persist visitor details per inviter.</comment>
+
+        <createTable tableName="poc_visitor">
+            <column name="id"          type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_poc_visitor" nullable="false"/>
+            </column>
+            <column name="first_name"  type="NVARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_name"   type="NVARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="company"     type="NVARCHAR(200)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="visitor_function" type="NVARCHAR(100)"/>
+            <column name="email"       type="NVARCHAR(200)"/>
+            <column name="phone"       type="NVARCHAR(50)"/>
+            <column name="description" type="NVARCHAR(2000)"/>
+            <column name="created_by"  type="NVARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at"  type="DATETIME2" defaultValueComputed="GETDATE()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Index for fast per-inviter search -->
+        <createIndex tableName="poc_visitor" indexName="idx_poc_visitor_created_by">
+            <column name="created_by"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

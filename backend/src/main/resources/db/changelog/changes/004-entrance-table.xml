@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="004-entrance-table" author="visitor-poc">
+        <comment>Create poc_entrance table for facility entrance/gate management.</comment>
+
+        <createTable tableName="poc_entrance">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_poc_entrance" nullable="false"/>
+            </column>
+            <column name="entrance_name" type="NVARCHAR(200)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="NVARCHAR(2000)"/>
+            <column name="created_at" type="DATETIME2" defaultValueComputed="GETDATE()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+    </changeSet>
+
+</databaseChangeLog>

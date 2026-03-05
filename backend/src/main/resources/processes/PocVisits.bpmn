@@ -5,229 +5,459 @@
                   xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
-                  id="Definitions_1nttncu"
+                  id="Definitions_VisitProcess2"
                   targetNamespace="http://bpmn.io/schema/bpmn"
                   exporter="Camunda Modeler"
-                  exporterVersion="5.43.1"
-                  modeler:executionPlatform="Camunda Platform"
-                  modeler:executionPlatformVersion="7.24.0">
+                  exporterVersion="5.43.1">
 
-  <bpmn:collaboration id="Collaboration_1ypvfed">
-    <bpmn:participant id="Participant_1w8k62h" name="Visit Process" processRef="VisitProcess_1.0" />
-  </bpmn:collaboration>
+  <!--
+    VisitProcess_2.0 — Invitation / SecurityCheck / Visit flow
+    ============================================================
+    Started programmatically by InvitationController (no Invite user task).
 
-  <bpmn:process id="VisitProcess_1.0" name="Invitation Process" isExecutable="true" camunda:versionTag="3">
-    <bpmn:laneSet id="LaneSet_04025rr">
-      <!-- Lane: Invitor -->
-      <bpmn:lane id="Lane_1lkdiqw" name="Invitor">
-        <bpmn:flowNodeRef>StartEvent_1</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Activity_0fze1aq</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Activity_0i328tm</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_17pwrkf</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Event_0li12so</bpmn:flowNodeRef>
-      </bpmn:lane>
-      <!-- Lane: Security -->
-      <bpmn:lane id="Lane_1k5o0jj" name="Security">
-        <bpmn:flowNodeRef>Activity_1ntxaf8</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Gateway_0e6h1g6</bpmn:flowNodeRef>
-      </bpmn:lane>
-      <!-- Lane: Gatekeeper (Porters) -->
-      <bpmn:lane id="Lane_0e210k2" name="Gatekeeper">
-        <bpmn:flowNodeRef>Activity_03g8gtv</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Event_04c2iu0</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>Activity_15y888q</bpmn:flowNodeRef>
-      </bpmn:lane>
-    </bpmn:laneSet>
+    Process variables at start:
+      starter      (String)    — inviter username
+      invitationId (Long)      — poc_invitation.id
+      visitorIds   (List<Long>)— one entry per visitor
+      entranceId   (Long)      — poc_entrance.id
 
-    <!-- Start Event -->
-    <bpmn:startEvent id="StartEvent_1" name="Start" camunda:initiator="starter">
-      <bpmn:outgoing>Flow_13yipoe</bpmn:outgoing>
+    Parallel multi-instance subprocess — one instance per visitorId.
+    Per-instance local variables (set by delegates / task completion):
+      visitorId              — injected by multi-instance framework
+      currentSecurityCheckId — set by visitorBlacklistCheckDelegate
+      blacklisted            — set by visitorBlacklistCheckDelegate
+      securityDecision       — APPROVE | REFUSE | BLACKLIST | ASK_INVITER
+      securityReviewer       — set on ASK_INVITER path
+      clarificationCount     — incremented by script task (per instance local)
+      clarificationQuestion  — set by security officer
+      clarificationAnswer    — set by inviter
+  -->
+
+  <bpmn:process id="VisitProcess_2.0" name="Visit Process 2.0" isExecutable="true" camunda:versionTag="1">
+
+    <!-- ── Start Event ──────────────────────────────────────────────────── -->
+    <bpmn:startEvent id="StartEvent_v2" name="Start">
+      <bpmn:outgoing>Flow_Start_Sub</bpmn:outgoing>
     </bpmn:startEvent>
 
-    <!-- User Task: Invite (Invitors) -->
-    <bpmn:userTask id="Activity_0fze1aq" name="Invite"
-                   camunda:assignee="${starter != null ? starter : null}"
-                   camunda:candidateGroups="Invitors">
-      <bpmn:documentation>Invite of a visitor</bpmn:documentation>
-      <bpmn:extensionElements>
-        <camunda:formData>
-          <camunda:formField id="VName" label="Name"       type="string" />
-          <camunda:formField id="VDate" label="Visit Date" type="date"   />
-        </camunda:formData>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_13yipoe</bpmn:incoming>
-      <bpmn:outgoing>Flow_09oexmf</bpmn:outgoing>
-    </bpmn:userTask>
+    <!-- ═══════════════════════════════════════════════════════════════════
+         Parallel multi-instance subprocess — one token per visitor
+         ═══════════════════════════════════════════════════════════════════ -->
+    <bpmn:subProcess id="SubProcess_PerVisitor" name="Per Visitor Security Check">
+      <bpmn:incoming>Flow_Start_Sub</bpmn:incoming>
+      <bpmn:outgoing>Flow_Sub_End</bpmn:outgoing>
 
-    <!-- Service Task: BlackList Check -->
-    <bpmn:serviceTask id="Activity_0i328tm" name="BlackList Check"
-                      camunda:class="eu.poc.claude.delegate.SillyBlacklistChecker">
-      <bpmn:documentation>Checks if visitor is blacklisted</bpmn:documentation>
-      <bpmn:extensionElements />
-      <bpmn:incoming>Flow_09oexmf</bpmn:incoming>
-      <bpmn:outgoing>Flow_15gr1x8</bpmn:outgoing>
-    </bpmn:serviceTask>
+      <bpmn:multiInstanceLoopCharacteristics
+          camunda:collection="${visitorIds}"
+          camunda:elementVariable="visitorId">
+      </bpmn:multiInstanceLoopCharacteristics>
 
-    <!-- Gateway: blacklist result -->
-    <bpmn:exclusiveGateway id="Gateway_17pwrkf">
-      <bpmn:incoming>Flow_15gr1x8</bpmn:incoming>
-      <bpmn:outgoing>Flow_1oycmjo</bpmn:outgoing>
-      <bpmn:outgoing>Flow_03e14oe</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
+      <!-- ── Subprocess Start ─────────────────────────────────────────── -->
+      <bpmn:startEvent id="SubStart_v2">
+        <bpmn:outgoing>Flow_Sub_Blacklist</bpmn:outgoing>
+      </bpmn:startEvent>
 
-    <!-- User Task: Security Check (Security) -->
-    <bpmn:userTask id="Activity_1ntxaf8" name="Security Check"
-                   camunda:candidateGroups="Security">
-      <bpmn:extensionElements>
-        <camunda:formData>
-          <camunda:formField id="reliability" label="Reliability Score" type="long" defaultValue="50" />
-        </camunda:formData>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_03e14oe</bpmn:incoming>
-      <bpmn:outgoing>Flow_0437egi</bpmn:outgoing>
-    </bpmn:userTask>
+      <!-- ── Service Task: Blacklist Check ───────────────────────────── -->
+      <!--
+        Sets local: blacklisted (boolean), currentSecurityCheckId (Long)
+      -->
+      <bpmn:serviceTask id="ST_BlacklistCheck" name="Blacklist Check"
+                        camunda:delegateExpression="${visitorBlacklistCheckDelegate}">
+        <bpmn:incoming>Flow_Sub_Blacklist</bpmn:incoming>
+        <bpmn:outgoing>Flow_Blacklist_GW</bpmn:outgoing>
+      </bpmn:serviceTask>
 
-    <!-- End Event: Invitation Refused -->
-    <bpmn:endEvent id="Event_0li12so" name="Invitation Refused">
-      <bpmn:documentation>Invitation was refused for security reasons</bpmn:documentation>
-      <bpmn:incoming>Flow_1oycmjo</bpmn:incoming>
-      <bpmn:incoming>Flow_1rww9ji</bpmn:incoming>
+      <!-- ── Gateway: Blacklisted? ────────────────────────────────────── -->
+      <bpmn:exclusiveGateway id="GW_Blacklisted" name="Blacklisted?">
+        <bpmn:incoming>Flow_Blacklist_GW</bpmn:incoming>
+        <bpmn:outgoing>Flow_IsBlacklisted</bpmn:outgoing>
+        <bpmn:outgoing>Flow_NotBlacklisted</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+
+      <!-- ── Service Task: Handle Pre-Blacklisted Visitor ────────────── -->
+      <!--
+        Marks the SecurityCheck as REFUSED (visitor already blacklisted).
+        securityDecision is null here → delegate defaults to REFUSED status.
+      -->
+      <bpmn:serviceTask id="ST_HandleBlacklisted" name="Handle Blacklisted"
+                        camunda:delegateExpression="${securityCheckRefusalDelegate}">
+        <bpmn:incoming>Flow_IsBlacklisted</bpmn:incoming>
+        <bpmn:outgoing>Flow_Blk_SubEnd</bpmn:outgoing>
+      </bpmn:serviceTask>
+
+      <!-- ── Subprocess End: Visitor was pre-blacklisted ─────────────── -->
+      <bpmn:endEvent id="SubEnd_Blacklisted" name="Visitor Pre-Blacklisted">
+        <bpmn:incoming>Flow_Blk_SubEnd</bpmn:incoming>
+      </bpmn:endEvent>
+
+      <!-- ── User Task: Security Check ───────────────────────────────── -->
+      <!--
+        Task listener (CREATE):
+          - Exposes securityCheckId as task-local variable for the frontend
+          - Re-assigns to securityReviewer when looping back after clarification
+        Candidate group: Security
+        Completed by SecurityCheckController.decide() via taskService.complete()
+      -->
+      <bpmn:userTask id="Activity_SecurityCheck_V2" name="Security Check"
+                     camunda:candidateGroups="Security">
+        <bpmn:extensionElements>
+          <camunda:taskListener event="create"
+                                delegateExpression="${securityCheckTaskListener}" />
+        </bpmn:extensionElements>
+        <bpmn:incoming>Flow_NotBlacklisted</bpmn:incoming>
+        <bpmn:incoming>Flow_ClarDone_V2</bpmn:incoming>
+        <bpmn:outgoing>Flow_SecCheck_GW</bpmn:outgoing>
+      </bpmn:userTask>
+
+      <!-- ── Gateway: Security Decision ──────────────────────────────── -->
+      <bpmn:exclusiveGateway id="GW_SecurityDecision" name="Security Decision">
+        <bpmn:incoming>Flow_SecCheck_GW</bpmn:incoming>
+        <bpmn:outgoing>Flow_Approve</bpmn:outgoing>
+        <bpmn:outgoing>Flow_Refuse</bpmn:outgoing>
+        <bpmn:outgoing>Flow_AskInviter_V2</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+
+      <!-- ── Service Task: Create Visits (APPROVE path) ──────────────── -->
+      <!--
+        Marks SecurityCheck as APPROVED and creates one poc_visit per day.
+        Reads: currentSecurityCheckId, visitorId (local), invitationId, entranceId (process)
+      -->
+      <bpmn:serviceTask id="ST_VisitCreation" name="Create Visits"
+                        camunda:delegateExpression="${visitCreationDelegate}">
+        <bpmn:incoming>Flow_Approve</bpmn:incoming>
+        <bpmn:outgoing>Flow_VisitCreation_SubEnd</bpmn:outgoing>
+      </bpmn:serviceTask>
+
+      <!-- ── Subprocess End: Visitor Approved ────────────────────────── -->
+      <bpmn:endEvent id="SubEnd_Approved" name="Visitor Approved">
+        <bpmn:incoming>Flow_VisitCreation_SubEnd</bpmn:incoming>
+      </bpmn:endEvent>
+
+      <!-- ── Service Task: Handle Refusal (REFUSE / BLACKLIST path) ──── -->
+      <!--
+        Reads securityDecision:
+          REFUSE    → status = REFUSED
+          BLACKLIST → status = BLACKLISTED, also sets poc_visitor.blacklisted = true
+      -->
+      <bpmn:serviceTask id="ST_HandleRefusal" name="Handle Refusal"
+                        camunda:delegateExpression="${securityCheckRefusalDelegate}">
+        <bpmn:incoming>Flow_Refuse</bpmn:incoming>
+        <bpmn:outgoing>Flow_Refusal_SubEnd</bpmn:outgoing>
+      </bpmn:serviceTask>
+
+      <!-- ── Subprocess End: Visitor Refused ─────────────────────────── -->
+      <bpmn:endEvent id="SubEnd_Refused" name="Visitor Refused">
+        <bpmn:incoming>Flow_Refusal_SubEnd</bpmn:incoming>
+      </bpmn:endEvent>
+
+      <!-- ── Script Task: Increment Clarification Count ──────────────── -->
+      <!--
+        Uses setVariableLocal so the count is scoped to this subprocess instance.
+        All tasks in a sequential subprocess share the same execution, so the
+        local variable persists until the subprocess instance ends.
+      -->
+      <bpmn:scriptTask id="ST_IncrCount" name="Increment Count" scriptFormat="groovy">
+        <bpmn:incoming>Flow_AskInviter_V2</bpmn:incoming>
+        <bpmn:outgoing>Flow_IncrCount_GW</bpmn:outgoing>
+        <bpmn:script>def c = execution.getVariableLocal('clarificationCount')
+execution.setVariableLocal('clarificationCount', c == null ? 1L : (c as Long) + 1L)</bpmn:script>
+      </bpmn:scriptTask>
+
+      <!-- ── Gateway: Max Clarifications Reached? ─────────────────────── -->
+      <bpmn:exclusiveGateway id="GW_MaxLoops" name="Max Loops?">
+        <bpmn:incoming>Flow_IncrCount_GW</bpmn:incoming>
+        <bpmn:outgoing>Flow_MaxLoops_V2</bpmn:outgoing>
+        <bpmn:outgoing>Flow_NeedsClarif_V2</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+
+      <!-- ── Service Task: Auto Refuse (max loops reached) ────────────── -->
+      <!--
+        securityDecision is still "ASK_INVITER" at this point →
+        delegate defaults to REFUSED status (not BLACKLISTED).
+      -->
+      <bpmn:serviceTask id="ST_AutoRefuse" name="Auto Refuse"
+                        camunda:delegateExpression="${securityCheckRefusalDelegate}">
+        <bpmn:incoming>Flow_MaxLoops_V2</bpmn:incoming>
+        <bpmn:outgoing>Flow_AutoRefuse_SubEnd</bpmn:outgoing>
+      </bpmn:serviceTask>
+
+      <!-- ── Subprocess End: Auto Refused ────────────────────────────── -->
+      <bpmn:endEvent id="SubEnd_AutoRefused" name="Auto Refused">
+        <bpmn:incoming>Flow_AutoRefuse_SubEnd</bpmn:incoming>
+      </bpmn:endEvent>
+
+      <!-- ── User Task: Provide Clarification ─────────────────────────── -->
+      <!--
+        Assigned to the original inviter (starter).
+        Task listener (CREATE): exposes securityCheckId as task-local variable.
+        Completed by SecurityCheckController.clarify() via taskService.complete()
+      -->
+      <bpmn:userTask id="Activity_Clarification_V2" name="Provide Clarification"
+                     camunda:assignee="${starter}">
+        <bpmn:extensionElements>
+          <camunda:taskListener event="create"
+                                delegateExpression="${securityCheckTaskListener}" />
+        </bpmn:extensionElements>
+        <bpmn:incoming>Flow_NeedsClarif_V2</bpmn:incoming>
+        <bpmn:outgoing>Flow_ClarDone_V2</bpmn:outgoing>
+      </bpmn:userTask>
+
+      <!-- ══ Subprocess Sequence Flows ════════════════════════════════ -->
+
+      <bpmn:sequenceFlow id="Flow_Sub_Blacklist"       sourceRef="SubStart_v2"              targetRef="ST_BlacklistCheck" />
+      <bpmn:sequenceFlow id="Flow_Blacklist_GW"        sourceRef="ST_BlacklistCheck"         targetRef="GW_Blacklisted" />
+
+      <bpmn:sequenceFlow id="Flow_IsBlacklisted"       sourceRef="GW_Blacklisted"            targetRef="ST_HandleBlacklisted">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${blacklisted == true}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="Flow_NotBlacklisted"      sourceRef="GW_Blacklisted"            targetRef="Activity_SecurityCheck_V2">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${blacklisted != true}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+
+      <bpmn:sequenceFlow id="Flow_Blk_SubEnd"          sourceRef="ST_HandleBlacklisted"      targetRef="SubEnd_Blacklisted" />
+      <bpmn:sequenceFlow id="Flow_SecCheck_GW"         sourceRef="Activity_SecurityCheck_V2" targetRef="GW_SecurityDecision" />
+
+      <bpmn:sequenceFlow id="Flow_Approve"             sourceRef="GW_SecurityDecision"       targetRef="ST_VisitCreation">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${securityDecision == 'APPROVE'}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="Flow_Refuse"              sourceRef="GW_SecurityDecision"       targetRef="ST_HandleRefusal">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${securityDecision == 'REFUSE' || securityDecision == 'BLACKLIST'}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="Flow_AskInviter_V2"       sourceRef="GW_SecurityDecision"       targetRef="ST_IncrCount">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${securityDecision == 'ASK_INVITER'}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+
+      <bpmn:sequenceFlow id="Flow_VisitCreation_SubEnd" sourceRef="ST_VisitCreation"         targetRef="SubEnd_Approved" />
+      <bpmn:sequenceFlow id="Flow_Refusal_SubEnd"       sourceRef="ST_HandleRefusal"         targetRef="SubEnd_Refused" />
+
+      <bpmn:sequenceFlow id="Flow_IncrCount_GW"        sourceRef="ST_IncrCount"              targetRef="GW_MaxLoops" />
+
+      <bpmn:sequenceFlow id="Flow_MaxLoops_V2"         sourceRef="GW_MaxLoops"               targetRef="ST_AutoRefuse">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${clarificationCount >= 5}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="Flow_NeedsClarif_V2"      sourceRef="GW_MaxLoops"               targetRef="Activity_Clarification_V2">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${clarificationCount &lt; 5}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+
+      <bpmn:sequenceFlow id="Flow_AutoRefuse_SubEnd"   sourceRef="ST_AutoRefuse"             targetRef="SubEnd_AutoRefused" />
+      <bpmn:sequenceFlow id="Flow_ClarDone_V2"         sourceRef="Activity_Clarification_V2" targetRef="Activity_SecurityCheck_V2" />
+
+    </bpmn:subProcess>
+
+    <!-- ── Process End Event ────────────────────────────────────────────── -->
+    <bpmn:endEvent id="EndEvent_v2" name="All Visitors Processed">
+      <bpmn:incoming>Flow_Sub_End</bpmn:incoming>
     </bpmn:endEvent>
 
-    <!-- Gateway: security check result -->
-    <bpmn:exclusiveGateway id="Gateway_0e6h1g6">
-      <bpmn:incoming>Flow_0437egi</bpmn:incoming>
-      <bpmn:outgoing>Flow_1rww9ji</bpmn:outgoing>
-      <bpmn:outgoing>Flow_1yjsoqh</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
+    <!-- ── Process-level Sequence Flows ─────────────────────────────────── -->
+    <bpmn:sequenceFlow id="Flow_Start_Sub" sourceRef="StartEvent_v2"      targetRef="SubProcess_PerVisitor" />
+    <bpmn:sequenceFlow id="Flow_Sub_End"   sourceRef="SubProcess_PerVisitor" targetRef="EndEvent_v2" />
 
-    <!-- User Task: Allow Visit (Porters / Gatekeeper) -->
-    <bpmn:userTask id="Activity_03g8gtv" name="Allow Visit"
-                   camunda:candidateGroups="Porters">
-      <bpmn:extensionElements>
-        <camunda:formData>
-          <camunda:formField id="AVDate" label="Actual visit date" type="date" />
-        </camunda:formData>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_1yjsoqh</bpmn:incoming>
-      <bpmn:outgoing>Flow_12x9ury</bpmn:outgoing>
-    </bpmn:userTask>
-
-    <!-- Service Task: Check In -->
-    <bpmn:serviceTask id="Activity_15y888q" name="Check In"
-                      camunda:class="eu.poc.claude.delegate.SillyCheckinService">
-      <bpmn:incoming>Flow_12x9ury</bpmn:incoming>
-      <bpmn:outgoing>Flow_14wcwfa</bpmn:outgoing>
-    </bpmn:serviceTask>
-
-    <!-- End Event: Visitor Checked In -->
-    <bpmn:endEvent id="Event_04c2iu0" name="Visitor Checked In">
-      <bpmn:incoming>Flow_14wcwfa</bpmn:incoming>
-    </bpmn:endEvent>
-
-    <!-- Sequence Flows -->
-    <bpmn:sequenceFlow id="Flow_13yipoe" sourceRef="StartEvent_1"     targetRef="Activity_0fze1aq" />
-    <bpmn:sequenceFlow id="Flow_09oexmf" sourceRef="Activity_0fze1aq" targetRef="Activity_0i328tm" />
-    <bpmn:sequenceFlow id="Flow_15gr1x8" sourceRef="Activity_0i328tm" targetRef="Gateway_17pwrkf" />
-
-    <bpmn:sequenceFlow id="Flow_1oycmjo" sourceRef="Gateway_17pwrkf"  targetRef="Event_0li12so">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${reliability &lt;= 30}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_03e14oe" sourceRef="Gateway_17pwrkf"  targetRef="Activity_1ntxaf8">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${reliability &gt; 30}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-
-    <bpmn:sequenceFlow id="Flow_0437egi" sourceRef="Activity_1ntxaf8" targetRef="Gateway_0e6h1g6" />
-
-    <bpmn:sequenceFlow id="Flow_1rww9ji" sourceRef="Gateway_0e6h1g6"  targetRef="Event_0li12so">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${reliability &lt;= 30}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_1yjsoqh" sourceRef="Gateway_0e6h1g6"  targetRef="Activity_03g8gtv">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${reliability &gt; 30}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-
-    <bpmn:sequenceFlow id="Flow_12x9ury" sourceRef="Activity_03g8gtv" targetRef="Activity_15y888q" />
-    <bpmn:sequenceFlow id="Flow_14wcwfa" sourceRef="Activity_15y888q" targetRef="Event_04c2iu0" />
   </bpmn:process>
 
-  <!-- BPMN Diagram (layout unchanged) -->
-  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
-    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1ypvfed">
-      <bpmndi:BPMNShape id="Participant_1w8k62h_di" bpmnElement="Participant_1w8k62h" isHorizontal="true">
-        <dc:Bounds x="160" y="82" width="1328" height="370" />
+  <!-- ════ BPMN Diagram Layout ════════════════════════════════════════════ -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_v2">
+    <bpmndi:BPMNPlane id="BPMNPlane_v2" bpmnElement="VisitProcess_2.0">
+
+      <!-- Process-level shapes -->
+      <bpmndi:BPMNShape id="StartEvent_v2_di" bpmnElement="StartEvent_v2">
+        <dc:Bounds x="162" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="168" y="345" width="25" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Lane_0e210k2_di" bpmnElement="Lane_0e210k2" isHorizontal="true">
-        <dc:Bounds x="190" y="332" width="1298" height="120" />
+
+      <bpmndi:BPMNShape id="SubProcess_PerVisitor_di" bpmnElement="SubProcess_PerVisitor" isExpanded="true">
+        <dc:Bounds x="250" y="100" width="1800" height="520" />
+        <bpmndi:BPMNLabel><dc:Bounds x="870" y="106" width="160" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Lane_1k5o0jj_di" bpmnElement="Lane_1k5o0jj" isHorizontal="true">
-        <dc:Bounds x="190" y="207" width="1298" height="125" />
+
+      <bpmndi:BPMNShape id="EndEvent_v2_di" bpmnElement="EndEvent_v2">
+        <dc:Bounds x="2102" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="2076" y="345" width="88" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Lane_1lkdiqw_di" bpmnElement="Lane_1lkdiqw" isHorizontal="true">
-        <dc:Bounds x="190" y="82" width="1298" height="125" />
+
+      <!-- Subprocess interior shapes (absolute coordinates within subprocess bounds) -->
+
+      <bpmndi:BPMNShape id="SubStart_v2_di" bpmnElement="SubStart_v2">
+        <dc:Bounds x="312" y="302" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
-        <dc:Bounds x="212" y="122" width="36" height="36" />
+
+      <bpmndi:BPMNShape id="ST_BlacklistCheck_di" bpmnElement="ST_BlacklistCheck">
+        <dc:Bounds x="400" y="280" width="120" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0fze1aq_di" bpmnElement="Activity_0fze1aq">
-        <dc:Bounds x="340" y="100" width="100" height="80" />
+
+      <bpmndi:BPMNShape id="GW_Blacklisted_di" bpmnElement="GW_Blacklisted" isMarkerVisible="true">
+        <dc:Bounds x="585" y="295" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="572" y="352" width="77" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0i328tm_di" bpmnElement="Activity_0i328tm">
-        <dc:Bounds x="540" y="100" width="100" height="80" />
+
+      <!-- Blacklisted path (upward) -->
+      <bpmndi:BPMNShape id="ST_HandleBlacklisted_di" bpmnElement="ST_HandleBlacklisted">
+        <dc:Bounds x="550" y="150" width="120" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_17pwrkf_di" bpmnElement="Gateway_17pwrkf" isMarkerVisible="true">
-        <dc:Bounds x="745" y="115" width="50" height="50" />
+
+      <bpmndi:BPMNShape id="SubEnd_Blacklisted_di" bpmnElement="SubEnd_Blacklisted">
+        <dc:Bounds x="732" y="172" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="707" y="215" width="87" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1ntxaf8_di" bpmnElement="Activity_1ntxaf8">
-        <dc:Bounds x="900" y="220" width="100" height="80" />
+
+      <!-- Main path continues -->
+      <bpmndi:BPMNShape id="Activity_SecurityCheck_V2_di" bpmnElement="Activity_SecurityCheck_V2">
+        <dc:Bounds x="700" y="280" width="120" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_0li12so_di" bpmnElement="Event_0li12so">
-        <dc:Bounds x="1142" y="122" width="36" height="36" />
-        <bpmndi:BPMNLabel><dc:Bounds x="1116" y="165" width="89" height="14" /></bpmndi:BPMNLabel>
+
+      <bpmndi:BPMNShape id="GW_SecurityDecision_di" bpmnElement="GW_SecurityDecision" isMarkerVisible="true">
+        <dc:Bounds x="895" y="295" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="870" y="352" width="100" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_0e6h1g6_di" bpmnElement="Gateway_0e6h1g6" isMarkerVisible="true">
-        <dc:Bounds x="1075" y="235" width="50" height="50" />
+
+      <!-- APPROVE path (upward) -->
+      <bpmndi:BPMNShape id="ST_VisitCreation_di" bpmnElement="ST_VisitCreation">
+        <dc:Bounds x="1010" y="150" width="120" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_03g8gtv_di" bpmnElement="Activity_03g8gtv">
-        <dc:Bounds x="1050" y="360" width="100" height="80" />
+
+      <bpmndi:BPMNShape id="SubEnd_Approved_di" bpmnElement="SubEnd_Approved">
+        <dc:Bounds x="1192" y="172" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1167" y="215" width="86" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_04c2iu0_di" bpmnElement="Event_04c2iu0">
-        <dc:Bounds x="1412" y="382" width="36" height="36" />
-        <bpmndi:BPMNLabel><dc:Bounds x="1388" y="425" width="89" height="14" /></bpmndi:BPMNLabel>
+
+      <!-- REFUSE path (downward) -->
+      <bpmndi:BPMNShape id="ST_HandleRefusal_di" bpmnElement="ST_HandleRefusal">
+        <dc:Bounds x="1010" y="440" width="120" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_15y888q_di" bpmnElement="Activity_15y888q">
-        <dc:Bounds x="1240" y="360" width="100" height="80" />
+
+      <bpmndi:BPMNShape id="SubEnd_Refused_di" bpmnElement="SubEnd_Refused">
+        <dc:Bounds x="1192" y="462" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1170" y="505" width="80" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Flow_13yipoe_di" bpmnElement="Flow_13yipoe">
-        <di:waypoint x="248" y="140" /><di:waypoint x="340" y="140" />
+
+      <!-- ASK_INVITER path (continues right) -->
+      <bpmndi:BPMNShape id="ST_IncrCount_di" bpmnElement="ST_IncrCount">
+        <dc:Bounds x="1010" y="292" width="100" height="56" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1010" y="355" width="100" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="GW_MaxLoops_di" bpmnElement="GW_MaxLoops" isMarkerVisible="true">
+        <dc:Bounds x="1175" y="295" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1162" y="352" width="76" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Auto-refuse path (downward from MaxLoops) -->
+      <bpmndi:BPMNShape id="ST_AutoRefuse_di" bpmnElement="ST_AutoRefuse">
+        <dc:Bounds x="1290" y="440" width="120" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="SubEnd_AutoRefused_di" bpmnElement="SubEnd_AutoRefused">
+        <dc:Bounds x="1472" y="462" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1454" y="505" width="72" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Clarification path (continues right from MaxLoops) -->
+      <bpmndi:BPMNShape id="Activity_Clarification_V2_di" bpmnElement="Activity_Clarification_V2">
+        <dc:Bounds x="1290" y="280" width="120" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+
+      <!-- ════ Edges ════════════════════════════════════════════════════ -->
+
+      <!-- Process-level flows -->
+      <bpmndi:BPMNEdge id="Flow_Start_Sub_di" bpmnElement="Flow_Start_Sub">
+        <di:waypoint x="198" y="320" /><di:waypoint x="250" y="320" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_09oexmf_di" bpmnElement="Flow_09oexmf">
-        <di:waypoint x="440" y="140" /><di:waypoint x="540" y="140" />
+
+      <bpmndi:BPMNEdge id="Flow_Sub_End_di" bpmnElement="Flow_Sub_End">
+        <di:waypoint x="2050" y="320" /><di:waypoint x="2102" y="320" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_15gr1x8_di" bpmnElement="Flow_15gr1x8">
-        <di:waypoint x="640" y="140" /><di:waypoint x="745" y="140" />
+
+      <!-- Subprocess internal flows -->
+      <bpmndi:BPMNEdge id="Flow_Sub_Blacklist_di" bpmnElement="Flow_Sub_Blacklist">
+        <di:waypoint x="348" y="320" /><di:waypoint x="400" y="320" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1oycmjo_di" bpmnElement="Flow_1oycmjo">
-        <di:waypoint x="795" y="140" /><di:waypoint x="1142" y="140" />
+
+      <bpmndi:BPMNEdge id="Flow_Blacklist_GW_di" bpmnElement="Flow_Blacklist_GW">
+        <di:waypoint x="520" y="320" /><di:waypoint x="585" y="320" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_03e14oe_di" bpmnElement="Flow_03e14oe">
-        <di:waypoint x="770" y="165" /><di:waypoint x="770" y="260" /><di:waypoint x="900" y="260" />
+
+      <!-- Blacklisted = true → up to ST_HandleBlacklisted -->
+      <bpmndi:BPMNEdge id="Flow_IsBlacklisted_di" bpmnElement="Flow_IsBlacklisted">
+        <di:waypoint x="610" y="295" /><di:waypoint x="610" y="230" />
+        <bpmndi:BPMNLabel><dc:Bounds x="616" y="258" width="40" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_0437egi_di" bpmnElement="Flow_0437egi">
-        <di:waypoint x="1000" y="260" /><di:waypoint x="1075" y="260" />
+
+      <!-- Blacklisted = false → SecurityCheck -->
+      <bpmndi:BPMNEdge id="Flow_NotBlacklisted_di" bpmnElement="Flow_NotBlacklisted">
+        <di:waypoint x="635" y="320" /><di:waypoint x="700" y="320" />
+        <bpmndi:BPMNLabel><dc:Bounds x="645" y="302" width="46" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1rww9ji_di" bpmnElement="Flow_1rww9ji">
-        <di:waypoint x="1100" y="235" /><di:waypoint x="1100" y="140" /><di:waypoint x="1142" y="140" />
+
+      <bpmndi:BPMNEdge id="Flow_Blk_SubEnd_di" bpmnElement="Flow_Blk_SubEnd">
+        <di:waypoint x="670" y="190" /><di:waypoint x="732" y="190" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1yjsoqh_di" bpmnElement="Flow_1yjsoqh">
-        <di:waypoint x="1100" y="285" /><di:waypoint x="1100" y="360" />
+
+      <bpmndi:BPMNEdge id="Flow_SecCheck_GW_di" bpmnElement="Flow_SecCheck_GW">
+        <di:waypoint x="820" y="320" /><di:waypoint x="895" y="320" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_12x9ury_di" bpmnElement="Flow_12x9ury">
-        <di:waypoint x="1150" y="400" /><di:waypoint x="1240" y="400" />
+
+      <!-- APPROVE → up to VisitCreation -->
+      <bpmndi:BPMNEdge id="Flow_Approve_di" bpmnElement="Flow_Approve">
+        <di:waypoint x="920" y="295" /><di:waypoint x="920" y="190" /><di:waypoint x="1010" y="190" />
+        <bpmndi:BPMNLabel><dc:Bounds x="927" y="238" width="46" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_14wcwfa_di" bpmnElement="Flow_14wcwfa">
-        <di:waypoint x="1340" y="400" /><di:waypoint x="1412" y="400" />
+
+      <!-- REFUSE / BLACKLIST → down to HandleRefusal -->
+      <bpmndi:BPMNEdge id="Flow_Refuse_di" bpmnElement="Flow_Refuse">
+        <di:waypoint x="920" y="345" /><di:waypoint x="920" y="480" /><di:waypoint x="1010" y="480" />
+        <bpmndi:BPMNLabel><dc:Bounds x="927" y="408" width="41" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
+
+      <!-- ASK_INVITER → IncrCount -->
+      <bpmndi:BPMNEdge id="Flow_AskInviter_V2_di" bpmnElement="Flow_AskInviter_V2">
+        <di:waypoint x="945" y="320" /><di:waypoint x="1010" y="320" />
+        <bpmndi:BPMNLabel><dc:Bounds x="950" y="302" width="57" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_VisitCreation_SubEnd_di" bpmnElement="Flow_VisitCreation_SubEnd">
+        <di:waypoint x="1130" y="190" /><di:waypoint x="1192" y="190" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Refusal_SubEnd_di" bpmnElement="Flow_Refusal_SubEnd">
+        <di:waypoint x="1130" y="480" /><di:waypoint x="1192" y="480" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_IncrCount_GW_di" bpmnElement="Flow_IncrCount_GW">
+        <di:waypoint x="1110" y="320" /><di:waypoint x="1175" y="320" />
+      </bpmndi:BPMNEdge>
+
+      <!-- >= 5 → down to AutoRefuse -->
+      <bpmndi:BPMNEdge id="Flow_MaxLoops_V2_di" bpmnElement="Flow_MaxLoops_V2">
+        <di:waypoint x="1200" y="345" /><di:waypoint x="1200" y="480" /><di:waypoint x="1290" y="480" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1207" y="408" width="40" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+
+      <!-- < 5 → Clarification -->
+      <bpmndi:BPMNEdge id="Flow_NeedsClarif_V2_di" bpmnElement="Flow_NeedsClarif_V2">
+        <di:waypoint x="1225" y="320" /><di:waypoint x="1290" y="320" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1232" y="302" width="46" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_AutoRefuse_SubEnd_di" bpmnElement="Flow_AutoRefuse_SubEnd">
+        <di:waypoint x="1410" y="480" /><di:waypoint x="1472" y="480" />
+      </bpmndi:BPMNEdge>
+
+      <!-- Clarification done → loop back to SecurityCheck (routing above all elements) -->
+      <bpmndi:BPMNEdge id="Flow_ClarDone_V2_di" bpmnElement="Flow_ClarDone_V2">
+        <di:waypoint x="1350" y="280" />
+        <di:waypoint x="1350" y="130" />
+        <di:waypoint x="760"  y="130" />
+        <di:waypoint x="760"  y="280" />
+      </bpmndi:BPMNEdge>
+
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
+
 </bpmn:definitions>

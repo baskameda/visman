@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+                  id="Definitions_1nttncu"
+                  targetNamespace="http://bpmn.io/schema/bpmn"
+                  exporter="Camunda Modeler"
+                  exporterVersion="5.43.1"
+                  modeler:executionPlatform="Camunda Platform"
+                  modeler:executionPlatformVersion="7.24.0">
+
+  <bpmn:collaboration id="Collaboration_1ypvfed">
+    <bpmn:participant id="Participant_1w8k62h" name="Visit Process" processRef="VisitProcess_1.0" />
+  </bpmn:collaboration>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       Version 6 changes:
+         • BlacklistCheck uses delegateExpression (Spring bean) for real DB check
+         • Security Check has TaskListener to re-assign to securityReviewer on loop-back
+         • Security decision: APPROVE | REFUSE | BLACKLIST | ASK_INVITER
+         • ASK_INVITER path: Gateway_ClarCount → (count<5) Activity_Clarification
+                             → loop back to Security Check
+         • Auto-refuse when clarificationCount >= 5
+       ═══════════════════════════════════════════════════════════════════════ -->
+
+  <bpmn:process id="VisitProcess_1.0" name="Invitation Process" isExecutable="true" camunda:versionTag="6">
+    <bpmn:laneSet id="LaneSet_04025rr">
+
+      <!-- Lane: Invitor -->
+      <bpmn:lane id="Lane_1lkdiqw" name="Invitor">
+        <bpmn:flowNodeRef>StartEvent_1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_0fze1aq</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_0i328tm</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_17pwrkf</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_0li12so</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_Clarification</bpmn:flowNodeRef>
+      </bpmn:lane>
+
+      <!-- Lane: Security -->
+      <bpmn:lane id="Lane_1k5o0jj" name="Security">
+        <bpmn:flowNodeRef>Activity_1ntxaf8</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_0e6h1g6</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ClarCount</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_IncrCount</bpmn:flowNodeRef>
+      </bpmn:lane>
+
+      <!-- Lane: Gatekeeper (Porters) -->
+      <bpmn:lane id="Lane_0e210k2" name="Gatekeeper">
+        <bpmn:flowNodeRef>Activity_03g8gtv</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_04c2iu0</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_15y888q</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <!-- ── Start Event ──────────────────────────────────────────────────── -->
+    <bpmn:startEvent id="StartEvent_1" name="Start" camunda:initiator="starter">
+      <bpmn:outgoing>Flow_13yipoe</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <!-- ── User Task: Invite ────────────────────────────────────────────── -->
+    <bpmn:userTask id="Activity_0fze1aq" name="Invite"
+                   camunda:assignee="${starter != null ? starter : null}"
+                   camunda:candidateGroups="Invitors">
+      <bpmn:documentation>Invite a visitor: select from registry or enter new visitor details.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="visitorId"    label="Visitor ID (registry)"  type="long"   />
+          <camunda:formField id="VFirstName"   label="First Name"              type="string" >
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="VLastName"    label="Last Name"               type="string" >
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="VCompany"     label="Company / Agency"        type="string" >
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="VFunction"    label="Function / Role"         type="string" />
+          <camunda:formField id="VEmail"       label="Email"                   type="string" />
+          <camunda:formField id="VPhone"       label="Telephone Number"        type="string" />
+          <camunda:formField id="VDescription" label="Description / Notes"     type="string" />
+          <camunda:formField id="VDate"        label="Planned Visit Date"      type="date"   >
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="VName"        label="Full Name (computed)"    type="string" />
+          <camunda:formField id="entranceId"   label="Entrance"                type="long"   >
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="entranceName" label="Entrance Name"           type="string" />
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_13yipoe</bpmn:incoming>
+      <bpmn:outgoing>Flow_09oexmf</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <!-- ── Service Task: BlackList Check (Spring delegateExpression) ──────── -->
+    <bpmn:serviceTask id="Activity_0i328tm" name="BlackList Check"
+                      camunda:delegateExpression="${sillyBlacklistChecker}">
+      <bpmn:documentation>Checks poc_visitor.blacklisted via Spring repository.</bpmn:documentation>
+      <bpmn:incoming>Flow_09oexmf</bpmn:incoming>
+      <bpmn:outgoing>Flow_15gr1x8</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- ── Gateway: blacklist result ──────────────────────────────────────── -->
+    <bpmn:exclusiveGateway id="Gateway_17pwrkf" name="Blacklisted?">
+      <bpmn:incoming>Flow_15gr1x8</bpmn:incoming>
+      <bpmn:outgoing>Flow_1oycmjo</bpmn:outgoing>
+      <bpmn:outgoing>Flow_03e14oe</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- ── User Task: Security Check ──────────────────────────────────────── -->
+    <!--
+      TaskListener on CREATE: if securityReviewer is set (loop-back after
+      clarification) the task is directly assigned to that officer.
+      On first pass securityReviewer is null → falls to candidateGroups="Security".
+    -->
+    <bpmn:userTask id="Activity_1ntxaf8" name="Security Check"
+                   camunda:candidateGroups="Security">
+      <bpmn:extensionElements>
+        <camunda:taskListener event="create"
+                              delegateExpression="${securityTaskAssignmentListener}" />
+        <camunda:formData>
+          <camunda:formField id="identityConfirmed"    label="Identity Confirmed"            type="boolean" defaultValue="false">
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <!-- APPROVE | REFUSE | BLACKLIST | ASK_INVITER -->
+          <camunda:formField id="securityDecision"     label="Decision"                      type="string">
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="securityNote"         label="Security Note"                 type="string" />
+          <camunda:formField id="blacklisted"          label="Blacklisted"                   type="boolean" defaultValue="false" />
+          <camunda:formField id="reliability"          label="Reliability Score"             type="long"    defaultValue="50" />
+          <!-- Clarification fields (populated on loop iterations) -->
+          <camunda:formField id="clarificationQuestion" label="Question for Inviter"         type="string" />
+          <camunda:formField id="clarificationAnswer"   label="Inviter Answer (read-only)"   type="string" />
+          <camunda:formField id="clarificationCount"    label="Clarification Attempt Count"  type="long"   />
+          <camunda:formField id="securityReviewer"      label="Requesting Security Officer"  type="string" />
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03e14oe</bpmn:incoming>
+      <bpmn:incoming>Flow_ClarDone</bpmn:incoming>
+      <bpmn:outgoing>Flow_0437egi</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <!-- ── End Event: Invitation Refused ──────────────────────────────────── -->
+    <bpmn:endEvent id="Event_0li12so" name="Invitation Refused">
+      <bpmn:documentation>Invitation was refused (blacklisted, security refusal, or max clarifications reached).</bpmn:documentation>
+      <bpmn:incoming>Flow_1oycmjo</bpmn:incoming>
+      <bpmn:incoming>Flow_1rww9ji</bpmn:incoming>
+      <bpmn:incoming>Flow_MaxLoops</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- ── Gateway: security decision (3-way) ─────────────────────────────── -->
+    <bpmn:exclusiveGateway id="Gateway_0e6h1g6" name="Security Decision">
+      <bpmn:incoming>Flow_0437egi</bpmn:incoming>
+      <bpmn:outgoing>Flow_1rww9ji</bpmn:outgoing>
+      <bpmn:outgoing>Flow_1yjsoqh</bpmn:outgoing>
+      <bpmn:outgoing>Flow_AskInviter</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- ── Gateway: clarification count check ────────────────────────────── -->
+    <bpmn:exclusiveGateway id="Gateway_ClarCount" name="Max Loops?">
+      <bpmn:incoming>Flow_AskInviter</bpmn:incoming>
+      <bpmn:outgoing>Flow_MaxLoops</bpmn:outgoing>
+      <bpmn:outgoing>Flow_NeedsClarif</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- ── User Task: Provide Clarification (Invitor lane) ───────────────── -->
+    <bpmn:userTask id="Activity_Clarification" name="Provide Clarification"
+                   camunda:assignee="${starter}">
+      <bpmn:documentation>The inviter answers security's clarification question.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <!-- Read-only fields shown to inviter -->
+          <camunda:formField id="clarificationQuestion" label="Security Question (read-only)" type="string" />
+          <camunda:formField id="clarificationCount"    label="Attempt Number"               type="long"   />
+          <!-- Inviter fills in this answer -->
+          <camunda:formField id="clarificationAnswer"   label="Your Answer"                  type="string">
+            <camunda:validation><camunda:constraint name="required" /></camunda:validation>
+          </camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_NeedsClarif</bpmn:incoming>
+      <bpmn:outgoing>Flow_ClarDone</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <!-- ── User Task: Allow Visit (Porters) ───────────────────────────────── -->
+    <bpmn:userTask id="Activity_03g8gtv" name="Allow Visit"
+                   camunda:candidateGroups="Porters">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="AVDate" label="Actual visit date" type="date" />
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1yjsoqh</bpmn:incoming>
+      <bpmn:outgoing>Flow_12x9ury</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <!-- ── Service Task: Check In ─────────────────────────────────────────── -->
+    <bpmn:serviceTask id="Activity_15y888q" name="Check In"
+                      camunda:class="eu.poc.claude.delegate.SillyCheckinService">
+      <bpmn:incoming>Flow_12x9ury</bpmn:incoming>
+      <bpmn:outgoing>Flow_14wcwfa</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- ── End Event: Visitor Checked In ──────────────────────────────────── -->
+    <bpmn:endEvent id="Event_04c2iu0" name="Visitor Checked In">
+      <bpmn:incoming>Flow_14wcwfa</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- ══ Sequence Flows ══════════════════════════════════════════════════ -->
+
+    <bpmn:sequenceFlow id="Flow_13yipoe"   sourceRef="StartEvent_1"      targetRef="Activity_0fze1aq" />
+    <bpmn:sequenceFlow id="Flow_09oexmf"   sourceRef="Activity_0fze1aq"  targetRef="Activity_0i328tm" />
+    <bpmn:sequenceFlow id="Flow_15gr1x8"   sourceRef="Activity_0i328tm"  targetRef="Gateway_17pwrkf" />
+
+    <bpmn:sequenceFlow id="Flow_1oycmjo"   sourceRef="Gateway_17pwrkf"   targetRef="Event_0li12so">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${blacklisted == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_03e14oe"   sourceRef="Gateway_17pwrkf"   targetRef="Activity_1ntxaf8">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${blacklisted != true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_0437egi"   sourceRef="Activity_1ntxaf8"  targetRef="Gateway_0e6h1g6" />
+
+    <bpmn:sequenceFlow id="Flow_1rww9ji"   sourceRef="Gateway_0e6h1g6"   targetRef="Event_0li12so">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${securityDecision == 'REFUSE' || securityDecision == 'BLACKLIST'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_1yjsoqh"   sourceRef="Gateway_0e6h1g6"   targetRef="Activity_03g8gtv">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${securityDecision == 'APPROVE'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_AskInviter" sourceRef="Gateway_0e6h1g6"  targetRef="Activity_IncrCount">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${securityDecision == 'ASK_INVITER'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <!-- ── Script Task: increment clarificationCount ──────────────────────── -->
+    <bpmn:scriptTask id="Activity_IncrCount" name="Increment Count" scriptFormat="groovy">
+      <bpmn:incoming>Flow_AskInviter</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToCounter</bpmn:outgoing>
+      <bpmn:script>def c = execution.getVariable('clarificationCount'); execution.setVariable('clarificationCount', c == null ? 1L : (c as Long) + 1L)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_ToCounter" sourceRef="Activity_IncrCount" targetRef="Gateway_ClarCount" />
+
+    <bpmn:sequenceFlow id="Flow_MaxLoops"  sourceRef="Gateway_ClarCount" targetRef="Event_0li12so">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${clarificationCount >= 5}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_NeedsClarif" sourceRef="Gateway_ClarCount" targetRef="Activity_Clarification">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${clarificationCount &lt; 5}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <!-- Loop back: clarification answer → Security Check re-assigned to securityReviewer -->
+    <bpmn:sequenceFlow id="Flow_ClarDone"  sourceRef="Activity_Clarification" targetRef="Activity_1ntxaf8" />
+
+    <bpmn:sequenceFlow id="Flow_12x9ury"   sourceRef="Activity_03g8gtv"  targetRef="Activity_15y888q" />
+    <bpmn:sequenceFlow id="Flow_14wcwfa"   sourceRef="Activity_15y888q"  targetRef="Event_04c2iu0" />
+
+  </bpmn:process>
+
+  <!-- ════ BPMN Diagram Layout ════════════════════════════════════════════ -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1ypvfed">
+
+      <!-- Participant (extended width for clarification loop) -->
+      <bpmndi:BPMNShape id="Participant_1w8k62h_di" bpmnElement="Participant_1w8k62h" isHorizontal="true">
+        <dc:Bounds x="160" y="82" width="1800" height="370" />
+      </bpmndi:BPMNShape>
+
+      <!-- Lanes -->
+      <bpmndi:BPMNShape id="Lane_0e210k2_di" bpmnElement="Lane_0e210k2" isHorizontal="true">
+        <dc:Bounds x="190" y="332" width="1770" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_1k5o0jj_di" bpmnElement="Lane_1k5o0jj" isHorizontal="true">
+        <dc:Bounds x="190" y="207" width="1770" height="125" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_1lkdiqw_di" bpmnElement="Lane_1lkdiqw" isHorizontal="true">
+        <dc:Bounds x="190" y="82" width="1770" height="125" />
+      </bpmndi:BPMNShape>
+
+      <!-- Nodes -->
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="212" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0fze1aq_di" bpmnElement="Activity_0fze1aq">
+        <dc:Bounds x="340" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0i328tm_di" bpmnElement="Activity_0i328tm">
+        <dc:Bounds x="540" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_17pwrkf_di" bpmnElement="Gateway_17pwrkf" isMarkerVisible="true">
+        <dc:Bounds x="745" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="731" y="172" width="78" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1ntxaf8_di" bpmnElement="Activity_1ntxaf8">
+        <dc:Bounds x="900" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0li12so_di" bpmnElement="Event_0li12so">
+        <dc:Bounds x="1142" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1116" y="165" width="89" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_0e6h1g6_di" bpmnElement="Gateway_0e6h1g6" isMarkerVisible="true">
+        <dc:Bounds x="1075" y="235" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1052" y="292" width="96" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_IncrCount_di" bpmnElement="Activity_IncrCount">
+        <dc:Bounds x="1163" y="237" width="60" height="42" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1163" y="280" width="60" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_ClarCount_di" bpmnElement="Gateway_ClarCount" isMarkerVisible="true">
+        <dc:Bounds x="1245" y="235" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1232" y="292" width="76" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_Clarification_di" bpmnElement="Activity_Clarification">
+        <dc:Bounds x="1490" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_03g8gtv_di" bpmnElement="Activity_03g8gtv">
+        <dc:Bounds x="1050" y="360" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_04c2iu0_di" bpmnElement="Event_04c2iu0">
+        <dc:Bounds x="1412" y="382" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1388" y="425" width="89" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_15y888q_di" bpmnElement="Activity_15y888q">
+        <dc:Bounds x="1240" y="360" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <!-- Edges -->
+      <bpmndi:BPMNEdge id="Flow_13yipoe_di" bpmnElement="Flow_13yipoe">
+        <di:waypoint x="248" y="140" /><di:waypoint x="340" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09oexmf_di" bpmnElement="Flow_09oexmf">
+        <di:waypoint x="440" y="140" /><di:waypoint x="540" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_15gr1x8_di" bpmnElement="Flow_15gr1x8">
+        <di:waypoint x="640" y="140" /><di:waypoint x="745" y="140" />
+      </bpmndi:BPMNEdge>
+      <!-- Blacklisted → Refused -->
+      <bpmndi:BPMNEdge id="Flow_1oycmjo_di" bpmnElement="Flow_1oycmjo">
+        <di:waypoint x="795" y="140" /><di:waypoint x="1142" y="140" />
+      </bpmndi:BPMNEdge>
+      <!-- Not blacklisted → Security Check -->
+      <bpmndi:BPMNEdge id="Flow_03e14oe_di" bpmnElement="Flow_03e14oe">
+        <di:waypoint x="770" y="165" /><di:waypoint x="770" y="260" /><di:waypoint x="900" y="260" />
+      </bpmndi:BPMNEdge>
+      <!-- Security Check → Security Decision GW -->
+      <bpmndi:BPMNEdge id="Flow_0437egi_di" bpmnElement="Flow_0437egi">
+        <di:waypoint x="1000" y="260" /><di:waypoint x="1075" y="260" />
+      </bpmndi:BPMNEdge>
+      <!-- REFUSE/BLACKLIST → Refused -->
+      <bpmndi:BPMNEdge id="Flow_1rww9ji_di" bpmnElement="Flow_1rww9ji">
+        <di:waypoint x="1100" y="235" /><di:waypoint x="1100" y="140" /><di:waypoint x="1178" y="140" />
+      </bpmndi:BPMNEdge>
+      <!-- APPROVE → Allow Visit -->
+      <bpmndi:BPMNEdge id="Flow_1yjsoqh_di" bpmnElement="Flow_1yjsoqh">
+        <di:waypoint x="1100" y="285" /><di:waypoint x="1100" y="360" />
+      </bpmndi:BPMNEdge>
+      <!-- ASK_INVITER → IncrCount ScriptTask -->
+      <bpmndi:BPMNEdge id="Flow_AskInviter_di" bpmnElement="Flow_AskInviter">
+        <di:waypoint x="1125" y="260" /><di:waypoint x="1163" y="258" />
+      </bpmndi:BPMNEdge>
+      <!-- IncrCount → ClarCount GW -->
+      <bpmndi:BPMNEdge id="Flow_ToCounter_di" bpmnElement="Flow_ToCounter">
+        <di:waypoint x="1223" y="258" /><di:waypoint x="1245" y="260" />
+      </bpmndi:BPMNEdge>
+      <!-- Max loops reached → Refused -->
+      <bpmndi:BPMNEdge id="Flow_MaxLoops_di" bpmnElement="Flow_MaxLoops">
+        <di:waypoint x="1270" y="235" /><di:waypoint x="1270" y="140" /><di:waypoint x="1178" y="140" />
+      </bpmndi:BPMNEdge>
+      <!-- Clarification needed → Clarification task -->
+      <bpmndi:BPMNEdge id="Flow_NeedsClarif_di" bpmnElement="Flow_NeedsClarif">
+        <di:waypoint x="1295" y="260" /><di:waypoint x="1540" y="260" /><di:waypoint x="1540" y="180" />
+      </bpmndi:BPMNEdge>
+      <!-- Clarification done → loop back to Security Check -->
+      <bpmndi:BPMNEdge id="Flow_ClarDone_di" bpmnElement="Flow_ClarDone">
+        <di:waypoint x="1490" y="140" /><di:waypoint x="1620" y="140" />
+        <di:waypoint x="1620" y="260" /><di:waypoint x="1000" y="260" />
+      </bpmndi:BPMNEdge>
+      <!-- Allow Visit → Check In -->
+      <bpmndi:BPMNEdge id="Flow_12x9ury_di" bpmnElement="Flow_12x9ury">
+        <di:waypoint x="1150" y="400" /><di:waypoint x="1240" y="400" />
+      </bpmndi:BPMNEdge>
+      <!-- Check In → Checked In -->
+      <bpmndi:BPMNEdge id="Flow_14wcwfa_di" bpmnElement="Flow_14wcwfa">
+        <di:waypoint x="1340" y="400" /><di:waypoint x="1412" y="400" />
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

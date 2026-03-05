@@ -2,19 +2,25 @@ import React, { useState, useCallback } from 'react'
 import {
   Box, Grid, Typography, Alert, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, Tooltip,
+  Button, Tooltip, Chip, Card, CardContent, LinearProgress,
 } from '@mui/material'
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom'
+import DoorFrontIcon   from '@mui/icons-material/DoorFront'
 import RefreshIcon     from '@mui/icons-material/Refresh'
 import { DatePicker }  from '@mui/x-date-pickers'
 import dayjs           from 'dayjs'
 import Layout          from '../components/Layout'
+import GatekeeperStatsPanel from '../components/GatekeeperStatsPanel'
+import { useGatekeeperStats } from '../hooks/useGatekeeperStats'
+import Tx              from '../components/Tx'
+import OrgStatsPanel    from '../components/OrgStatsPanel'
+import { useOrgStats }  from '../hooks/useOrgStats'
 import TaskCard, { TaskCardSkeleton } from '../components/TaskCard'
 import ProcessFlowViz  from '../components/ProcessFlowViz'
 import { useAuth }     from '../context/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { useTaskSSE } from '../hooks/useTaskSSE'
-import { getTasksByGroup, getProcessVariables, completeTask, claimTask } from '../api/operatonApi'
+import { getTasksByGroup, getProcessVariables, completeTask, claimTask, getMyEntrances } from '../api/operatonApi'
 
 export default function GatekeeperDashboard() {
   const { auth } = useAuth()
@@ -29,6 +35,8 @@ export default function GatekeeperDashboard() {
   const [activeTask, setActiveTask] = useState(null)
   const [avDate, setAvDate]         = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [myEntrances, setMyEntrances] = useState([])
+  const [entrancesLoading, setEntrancesLoading] = useState(true)
 
   const loadTasks = useCallback(async () => {
     setError('')
@@ -48,6 +56,16 @@ export default function GatekeeperDashboard() {
   }, [auth, t])
 
   useTaskSSE(loadTasks)
+  const { stats: orgStats, loading: orgLoading, refresh: orgRefresh } = useOrgStats(auth)
+  const { stats: gkStats, loading: gkLoading, refresh: gkRefresh } = useGatekeeperStats(auth)
+
+  React.useEffect(() => {
+    setEntrancesLoading(true)
+    getMyEntrances(auth)
+      .then(setMyEntrances)
+      .catch(() => setMyEntrances([]))
+      .finally(() => setEntrancesLoading(false))
+  }, [auth])
 
   const handleOpenDialog = async (task, vars) => {
     try { await claimTask(auth, task.id) } catch { /* already claimed */ }
@@ -63,6 +81,7 @@ export default function GatekeeperDashboard() {
     try {
       await completeTask(auth, activeTask.id, { AVDate: avDate.toISOString().split('T')[0] })
       setDialogOpen(false)
+      gkRefresh()
       await loadTasks()
     } catch (e) {
       setError(t('gatekeeper.failedToSubmit', { error: e.response?.data?.message ?? e.message }))
@@ -73,6 +92,37 @@ export default function GatekeeperDashboard() {
 
   return (
     <Layout>
+      <OrgStatsPanel stats={orgStats} loading={orgLoading} onRefresh={orgRefresh} isAdmin={auth?.isAlsoAdmin ?? auth?.role === 'ADMIN'} />
+      <GatekeeperStatsPanel stats={gkStats} loading={gkLoading} />
+
+      {/* My Entrances */}
+      <Card variant="outlined" sx={{ mb: 3 }}>
+        <CardContent sx={{ pb: '12px !important' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: entrancesLoading ? 1 : myEntrances.length > 0 ? 1.5 : 0 }}>
+            <DoorFrontIcon color="primary" fontSize="small" />
+            <Typography variant="subtitle2" fontWeight={700}>My Entrances</Typography>
+          </Box>
+          {entrancesLoading && <LinearProgress sx={{ borderRadius: 1 }} />}
+          {!entrancesLoading && myEntrances.length === 0 && (
+            <Typography variant="body2" color="text.secondary">No entrances assigned yet.</Typography>
+          )}
+          {!entrancesLoading && myEntrances.length > 0 && (
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {myEntrances.map(e => (
+                <Chip
+                  key={e.id}
+                  icon={<MeetingRoomIcon />}
+                  label={e.name}
+                  title={e.description ?? ''}
+                  color="primary"
+                  variant="outlined"
+                  size="small"
+                />
+              ))}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>

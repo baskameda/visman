@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="005-entrance-gatekeeper" author="visitor-poc">
+        <comment>Join table: assigns gatekeepers (by username) to entrances.</comment>
+
+        <createTable tableName="poc_entrance_gatekeeper">
+            <column name="entrance_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="gatekeeper_username" type="NVARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addPrimaryKey
+            tableName="poc_entrance_gatekeeper"
+            columnNames="entrance_id, gatekeeper_username"
+            constraintName="pk_entrance_gatekeeper"/>
+
+        <addForeignKeyConstraint
+            baseTableName="poc_entrance_gatekeeper"
+            baseColumnNames="entrance_id"
+            referencedTableName="poc_entrance"
+            referencedColumnNames="id"
+            constraintName="fk_eg_entrance"
+            onDelete="CASCADE"/>
+
+        <createIndex tableName="poc_entrance_gatekeeper" indexName="idx_eg_gatekeeper">
+            <column name="gatekeeper_username"/>
+        </createIndex>
+
+    </changeSet>
+
+</databaseChangeLog>

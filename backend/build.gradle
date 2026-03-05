@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.5.9'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'jacoco'
 }
 
 group = 'eu.poc.claude'
@@ -40,13 +41,51 @@ dependencies {
     // ── Liquibase ─────────────────────────────────────────────────────────────
     implementation 'org.liquibase:liquibase-core'
 
+    // ── Groovy – required for Groovy script tasks in the BPMN process ────────
+    implementation 'org.codehaus.groovy:groovy-jsr223:3.0.22'
+
     // ── SQL Server JDBC Driver ────────────────────────────────────────────────
     runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11'
 
     // ── Test ──────────────────────────────────────────────────────────────────
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params'
+    testImplementation 'org.mockito:mockito-junit-jupiter'
+    testImplementation 'org.assertj:assertj-core'
 }
 
 test {
     useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacoco {
+    toolVersion = '0.8.12'
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required  = true
+        html.required = true
+        csv.required  = false
+    }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                // Exclude Spring Boot main class (just calls SpringApplication.run)
+                '**/VisitorApplication.class'
+            ])
+        }))
+    }
+}
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.85
+            }
+        }
+    }
 }

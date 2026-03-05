@@ -26,6 +26,7 @@ import DevLogsModal    from './DevLogsModal'
 import TechDocsModal   from './TechDocsModal'
 import SupportDocsModal from './SupportDocsModal'
 import SalesDocsModal   from './SalesDocsModal'
+import CodeQualityReportModal from './CodeQualityReportModal'
 import Tx from './Tx'
 import { useAuth } from '../context/AuthContext'
 
@@ -98,6 +99,7 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location, ed
   const [techOpen, setTechOpen] = React.useState(false)
   const [supportOpen, setSupportOpen] = React.useState(false)
   const [salesOpen, setSalesOpen] = React.useState(false)
+  const [codeQualityOpen, setCodeQualityOpen] = React.useState(false)
   const initials = auth?.firstName
     ? auth.firstName.slice(0, 1).toUpperCase() + (auth.firstName.slice(1, 2) ?? '')
     : '?'
@@ -202,6 +204,7 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location, ed
                 { label: 'Tech Documentation',         action: () => setTechOpen(true) },
                 { label: 'Support Documentation',      action: () => setSupportOpen(true) },
                 { label: 'Sales & Marketing',          action: () => setSalesOpen(true) },
+                { label: 'Code Quality Report',        action: () => setCodeQualityOpen(true) },
               ].map(({ label, action }) => (
                 <Box key={label} onClick={action} sx={{
                   px: 1.25, py: 0.5, borderRadius: 1.5, cursor: 'pointer',
@@ -258,6 +261,7 @@ function DrawerContent({ collapsed, onToggle, auth, meta, navItems, location, ed
       <TechDocsModal open={techOpen} onClose={() => setTechOpen(false)} />
       <SupportDocsModal open={supportOpen} onClose={() => setSupportOpen(false)} />
       <SalesDocsModal open={salesOpen} onClose={() => setSalesOpen(false)} />
+      <CodeQualityReportModal open={codeQualityOpen} onClose={() => setCodeQualityOpen(false)} />
     </Box>
   )
 }

@@ -20,10 +20,10 @@ public class WebSecurityConfig {
     @Order(1)
     public SecurityFilterChain restApiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-            .securityMatcher("/engine-rest/**", "/api/**")
-            .csrf(csrf -> csrf.disable())
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+                .securityMatcher("/engine-rest/**", "/api/**")
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         return http.build();
     }
 
@@ -36,8 +36,12 @@ public class WebSecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
         config.setAllowedOrigins(List.of(
-            "http://localhost:5173",
-            "http://localhost:3000"
+                "http://localhost:5173",
+                "http://localhost:5174",
+                "http://localhost:3000",
+                "https://localhost:5173",
+                "https://localhost:5174",
+                "https://localhost:3000"
         ));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));

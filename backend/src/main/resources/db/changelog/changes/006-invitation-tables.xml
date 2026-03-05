@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- ── Invitation ───────────────────────────────────────────────────────── -->
+    <changeSet id="006-1" author="poc">
+        <createTable tableName="poc_invitation">
+            <column name="id"                  type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="inviter_username"    type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="start_date"          type="DATE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="end_date"            type="DATE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="entrance_id"         type="BIGINT">
+                <constraints nullable="false"
+                             foreignKeyName="fk_invitation_entrance"
+                             references="poc_entrance(id)"/>
+            </column>
+            <column name="company"             type="VARCHAR(255)"/>
+            <column name="description"         type="VARCHAR(2000)"/>
+            <!-- computed from security-check statuses at query time -->
+            <column name="process_instance_id" type="VARCHAR(64)"/>
+            <column name="created_at"          type="DATETIME"
+                    defaultValueComputed="CURRENT_TIMESTAMP"/>
+        </createTable>
+    </changeSet>
+
+    <!-- ── Invitation ↔ Visitor (many-to-many) ─────────────────────────────── -->
+    <changeSet id="006-2" author="poc">
+        <createTable tableName="poc_invitation_visitor">
+            <column name="invitation_id" type="BIGINT">
+                <constraints nullable="false"
+                             foreignKeyName="fk_iv_invitation"
+                             references="poc_invitation(id)"/>
+            </column>
+            <column name="visitor_id"    type="BIGINT">
+                <constraints nullable="false"
+                             foreignKeyName="fk_iv_visitor"
+                             references="poc_visitor(id)"/>
+            </column>
+        </createTable>
+        <addPrimaryKey tableName="poc_invitation_visitor"
+                       columnNames="invitation_id,visitor_id"
+                       constraintName="pk_invitation_visitor"/>
+    </changeSet>
+
+</databaseChangeLog>

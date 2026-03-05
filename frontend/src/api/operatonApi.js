@@ -294,3 +294,113 @@ export async function addMembership(credentials, userId, groupId) {
 export async function removeMembership(credentials, userId, groupId) {
   await client(credentials).delete(`/group/${groupId}/members/${userId}`)
 }
+
+/** Historic process instances started by a specific user */
+export async function getHistoricProcessesByStarter(credentials, userId) {
+  const res = await client(credentials).get('/history/process-instance', {
+    params: {
+      processDefinitionKey: PROCESS_KEY,
+      startedBy: userId,
+      sortBy: 'startTime',
+      sortOrder: 'desc',
+      maxResults: 500,
+    },
+  })
+  return res.data
+}
+
+// ─── Visitor Registry ─────────────────────────────────────────────────────────
+
+const API_BASE = "/api"
+
+/**
+ * Search visitors previously created by the logged-in inviter.
+ * q="" returns up to 20 recent visitors; any other value filters by name/company/email.
+ * Ownership is enforced server-side — other inviters' visitors are never returned.
+ */
+export async function searchVisitors(credentials, q = "") {
+  const res = await axios.get(`${API_BASE}/visitors/search`, {
+    params: { q },
+    headers: {
+      Authorization: "Basic " + btoa(`${credentials.username}:${credentials.password}`),
+    },
+  })
+  return res.data // array of Visitor { id, firstName, lastName, company, function, email, phone, description }
+}
+
+/**
+ * Persist a new visitor to the registry.
+ * The server assigns ownership to the authenticated user.
+ */
+export async function createVisitor(credentials, visitor) {
+  const res = await axios.post(`${API_BASE}/visitors`, visitor, {
+    headers: {
+      Authorization: "Basic " + btoa(`${credentials.username}:${credentials.password}`),
+      "Content-Type": "application/json",
+    },
+  })
+  return res.data // saved Visitor with id
+}
+
+
+// ─── Visitor Blacklist ────────────────────────────────────────────────────────
+
+/** Add a visitor to the blacklist (Security only). */
+export async function setBlacklisted(credentials, visitorId) {
+  await axios.put(`${API_BASE}/visitors/${visitorId}/blacklist`, null, {
+    headers: { Authorization: "Basic " + btoa(`${credentials.username}:${credentials.password}`) },
+  })
+}
+
+/** Remove a visitor from the blacklist (Security only). */
+export async function clearBlacklisted(credentials, visitorId) {
+  await axios.delete(`${API_BASE}/visitors/${visitorId}/blacklist`, {
+    headers: { Authorization: "Basic " + btoa(`${credentials.username}:${credentials.password}`) },
+  })
+}
+
+/** List all blacklisted visitors across all owners (Security view). */
+export async function getBlacklistedVisitors(credentials) {
+  const res = await axios.get(`${API_BASE}/visitors/blacklisted`, {
+    headers: { Authorization: "Basic " + btoa(`${credentials.username}:${credentials.password}`) },
+  })
+  return res.data
+}
+
+
+// ─── Entrances ────────────────────────────────────────────────────────────────
+
+const _ah = (creds) =>
+  ({ Authorization: 'Basic ' + btoa(`${creds.username}:${creds.password}`) })
+
+export async function getEntrances(credentials) {
+  const res = await axios.get(`${API_BASE}/entrances`, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function createEntrance(credentials, entrance) {
+  const res = await axios.post(`${API_BASE}/entrances`, entrance, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function updateEntrance(credentials, id, entrance) {
+  await axios.put(`${API_BASE}/entrances/${id}`, entrance, { headers: _ah(credentials) })
+}
+
+export async function deleteEntrance(credentials, id) {
+  await axios.delete(`${API_BASE}/entrances/${id}`, { headers: _ah(credentials) })
+}
+
+export async function getEntranceGatekeepers(credentials, entranceId) {
+  const res = await axios.get(`${API_BASE}/entrances/${entranceId}/gatekeepers`, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function setEntranceGatekeepers(credentials, entranceId, usernames) {
+  await axios.put(`${API_BASE}/entrances/${entranceId}/gatekeepers`, usernames, { headers: _ah(credentials) })
+}
+
+export async function getMyEntrances(credentials) {
+  const res = await axios.get(`${API_BASE}/entrances/my`, { headers: _ah(credentials) })
+  return res.data
+}

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Changeset 003: Add blacklisted flag to poc_visitor
+        ===================================================
+        Added in session 11. The original 002 changeset created the table
+        without this column; this changeset adds it to existing installations.
+        New installations will also run this changeset immediately after 002.
+    -->
+    <changeSet id="003-visitor-blacklist" author="visitor-poc">
+        <comment>Add blacklisted column to poc_visitor for security blacklist feature.</comment>
+
+        <addColumn tableName="poc_visitor">
+            <column name="blacklisted" type="BIT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <!-- Index for fast blacklist queries (Security dashboard) -->
+        <createIndex tableName="poc_visitor" indexName="idx_poc_visitor_blacklisted">
+            <column name="blacklisted"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
