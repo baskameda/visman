@@ -557,3 +557,51 @@ export async function getSupervisableInviters(credentials) {
   const res = await axios.get(`${API_BASE}/supervisor/inviters`, { headers: _ah(credentials) })
   return res.data
 }
+
+// ─── Security Supervisor ──────────────────────────────────────────────────────
+
+export async function amISecuritySupervisor(credentials) {
+  const res = await axios.get(`${API_BASE}/supervisor/security/am-i-supervisor`, { headers: _ah(credentials) })
+  return res.data // { supervisor: true/false }
+}
+
+export async function getPendingMineChecks(credentials) {
+  const res = await axios.get(`${API_BASE}/security-checks/pending/mine`, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function getPendingOthersChecks(credentials) {
+  const res = await axios.get(`${API_BASE}/security-checks/pending/others`, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function getPendingSuperviseeChecks(credentials) {
+  const res = await axios.get(`${API_BASE}/security-checks/pending/supervisees`, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function claimSecurityCheck(credentials, id) {
+  await axios.post(`${API_BASE}/security-checks/${id}/claim`, null, { headers: _ah(credentials) })
+}
+
+export async function getSecuritySupervisorAssignments(credentials) {
+  const res = await axios.get(`${API_BASE}/supervisor/security/assignments`, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function setSecuritySupervisorAssignment(credentials, officerUsername, supervisorUsername) {
+  await axios.put(`${API_BASE}/supervisor/security/assignments`, { officerUsername, supervisorUsername }, {
+    headers: { ..._ah(credentials), 'Content-Type': 'application/json' },
+  })
+}
+
+export async function removeSecuritySupervisorAssignment(credentials, officerUsername) {
+  await axios.delete(`${API_BASE}/supervisor/security/assignments/${encodeURIComponent(officerUsername)}`, {
+    headers: _ah(credentials),
+  })
+}
+
+export async function getSecurityOfficers(credentials) {
+  const res = await axios.get(`${API_BASE}/supervisor/security/officers`, { headers: _ah(credentials) })
+  return res.data
+}

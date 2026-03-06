@@ -3,6 +3,7 @@ package eu.poc.claude.invitation;
 import eu.poc.claude.entrance.EntranceRepository;
 import eu.poc.claude.visitor.Visitor;
 import eu.poc.claude.visitor.VisitorRepository;
+import org.operaton.bpm.engine.IdentityService;
 import org.operaton.bpm.engine.RuntimeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,19 +24,22 @@ public class InvitationController {
     private final VisitorRepository       visitorRepo;
     private final EntranceRepository      entranceRepo;
     private final RuntimeService          runtimeService;
+    private final IdentityService         identityService;
 
     public InvitationController(InvitationRepository invitationRepo,
                                  SecurityCheckRepository securityCheckRepo,
                                  VisitRepository visitRepo,
                                  VisitorRepository visitorRepo,
                                  EntranceRepository entranceRepo,
-                                 RuntimeService runtimeService) {
+                                 RuntimeService runtimeService,
+                                 IdentityService identityService) {
         this.invitationRepo    = invitationRepo;
         this.securityCheckRepo = securityCheckRepo;
         this.visitRepo         = visitRepo;
         this.visitorRepo       = visitorRepo;
         this.entranceRepo      = entranceRepo;
         this.runtimeService    = runtimeService;
+        this.identityService   = identityService;
     }
 
     // ── POST /api/invitations ─────────────────────────────────────────────────
@@ -113,7 +117,11 @@ public class InvitationController {
         invitationRepo.save(inv);
 
         for (Long vid : unique) invitationRepo.addVisitor(inv.getId(), vid);
-        for (Long vid : unique) securityCheckRepo.save(inv.getId(), vid);
+
+        // Create security checks and assign via least-loaded distribution
+        List<SecurityCheck> newChecks = new ArrayList<>();
+        for (Long vid : unique) newChecks.add(securityCheckRepo.save(inv.getId(), vid));
+        assignLeastLoaded(newChecks);
 
         // Start BPMN process
         Map<String, Object> vars = new HashMap<>();
@@ -172,6 +180,24 @@ public class InvitationController {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private void assignLeastLoaded(List<SecurityCheck> checks) {
+        if (checks.isEmpty()) return;
+        List<org.operaton.bpm.engine.identity.User> members =
+            identityService.createUserQuery().memberOfGroup("Security").list();
+        if (members.isEmpty()) return;
+
+        // Sort by current pending load ascending
+        List<String> officers = members.stream()
+            .map(org.operaton.bpm.engine.identity.User::getId)
+            .sorted(java.util.Comparator.comparingInt(securityCheckRepo::countPendingForOfficer))
+            .collect(java.util.stream.Collectors.toList());
+
+        for (int i = 0; i < checks.size(); i++) {
+            String assignee = officers.get(i % officers.size());
+            securityCheckRepo.setAssignedTo(checks.get(i).getId(), assignee);
+        }
+    }
 
     private static String computeStatus(List<SecurityCheck> checks) {
         if (checks.isEmpty()) return "PENDING";

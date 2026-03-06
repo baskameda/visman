@@ -13,7 +13,7 @@ import { useAuth }       from '../context/AuthContext'
 import { useTranslation } from 'react-i18next'
 import {
   verifyIdentity, getUserGroups,
-  getWebAdminUsers, createSuperheroAdmin, amISupervisor,
+  getWebAdminUsers, createSuperheroAdmin, amISupervisor, amISecuritySupervisor,
 } from '../api/operatonApi'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 
@@ -110,10 +110,14 @@ export default function LoginPage() {
 
       const isAlsoAdmin = groupIds.includes('webAdmins')
       let isSupervisor = false
+      let isSecuritySupervisor = false
       if (role === 'INVITER') {
         try { isSupervisor = (await amISupervisor({ ...credentials })).supervisor } catch {}
       }
-      login({ ...credentials, firstName: credentials.username, role, isAlsoAdmin, isSupervisor })
+      if (role === 'SECURITY') {
+        try { isSecuritySupervisor = (await amISecuritySupervisor({ ...credentials })).supervisor } catch {}
+      }
+      login({ ...credentials, firstName: credentials.username, role, isAlsoAdmin, isSupervisor, isSecuritySupervisor })
       const routes = { INVITER: '/inviter', SECURITY: '/security', GATEKEEPER: '/gatekeeper', ADMIN: '/admin' }
       navigate(routes[role] ?? '/inviter')
     } catch (err) {

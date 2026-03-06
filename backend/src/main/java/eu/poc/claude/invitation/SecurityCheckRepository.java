@@ -9,6 +9,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,7 +22,7 @@ public class SecurityCheckRepository {
 
     private static final String FULL_SELECT =
         "SELECT sc.id, sc.invitation_id, sc.visitor_id, sc.status, " +
-        "       sc.reliability, sc.security_note, sc.security_reviewer, " +
+        "       sc.reliability, sc.security_note, sc.security_reviewer, sc.assigned_to, " +
         "       sc.clarification_question, sc.clarification_answer, " +
         "       sc.clarification_count, sc.decided_at, " +
         "       v.first_name, v.last_name, v.company AS visitor_company, " +
@@ -43,6 +44,7 @@ public class SecurityCheckRepository {
         int rel = rs.getInt("reliability"); sc.setReliability(rs.wasNull() ? null : rel);
         sc.setSecurityNote(         rs.getString("security_note"));
         sc.setSecurityReviewer(     rs.getString("security_reviewer"));
+        sc.setAssignedTo(           rs.getString("assigned_to"));
         sc.setClarificationQuestion(rs.getString("clarification_question"));
         sc.setClarificationAnswer(  rs.getString("clarification_answer"));
         int cnt = rs.getInt("clarification_count"); sc.setClarificationCount(rs.wasNull() ? 0 : cnt);
@@ -147,5 +149,64 @@ public class SecurityCheckRepository {
     public void updateStatus(long id, String status) {
         jdbc.update("UPDATE poc_security_check SET status = ?, decided_at = ? WHERE id = ?",
                     status, Timestamp.valueOf(LocalDateTime.now()), id);
+    }
+
+    public void setAssignedTo(long id, String username) {
+        jdbc.update("UPDATE poc_security_check SET assigned_to = ? WHERE id = ?", username, id);
+    }
+
+    /**
+     * Supervisor claim: set security_reviewer preemptively to signal ownership.
+     * Returns false if already claimed by someone else (optimistic guard).
+     */
+    public boolean claimCheck(long id, String supervisorUsername) {
+        int rows = jdbc.update(
+            "UPDATE poc_security_check SET security_reviewer = ? " +
+            "WHERE id = ? AND status = 'PENDING' " +
+            "AND (security_reviewer IS NULL OR security_reviewer = ?)",
+            supervisorUsername, id, supervisorUsername);
+        return rows > 0;
+    }
+
+    // ── Filtered pending queries (for dashboard tabs) ──────────────────────────
+
+    /** My assigned checks (assigned_to = me) + unassigned (assigned_to IS NULL). */
+    public List<SecurityCheck> findPendingForOfficer(String username) {
+        return jdbc.query(
+            FULL_SELECT +
+            "WHERE sc.status = 'PENDING' " +
+            "AND (sc.assigned_to = ? OR sc.assigned_to IS NULL) " +
+            "ORDER BY sc.id",
+            this::map, username);
+    }
+
+    /** Checks assigned to other officers (not me, not unassigned). */
+    public List<SecurityCheck> findPendingOfOthers(String username) {
+        return jdbc.query(
+            FULL_SELECT +
+            "WHERE sc.status = 'PENDING' " +
+            "AND sc.assigned_to IS NOT NULL AND sc.assigned_to <> ? " +
+            "ORDER BY sc.assigned_to, sc.id",
+            this::map, username);
+    }
+
+    /** Pending checks assigned to any of the given supervisees. */
+    public List<SecurityCheck> findPendingBySupervisees(List<String> usernames) {
+        if (usernames.isEmpty()) return List.of();
+        String placeholders = String.join(",", Collections.nCopies(usernames.size(), "?"));
+        return jdbc.query(
+            FULL_SELECT +
+            "WHERE sc.status = 'PENDING' " +
+            "AND sc.assigned_to IN (" + placeholders + ") " +
+            "ORDER BY sc.assigned_to, sc.id",
+            this::map, usernames.toArray());
+    }
+
+    /** Count of pending checks per officer — used for least-loaded assignment. */
+    public int countPendingForOfficer(String username) {
+        Integer count = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM poc_security_check WHERE assigned_to = ? AND status = 'PENDING'",
+            Integer.class, username);
+        return count != null ? count : 0;
     }
 }

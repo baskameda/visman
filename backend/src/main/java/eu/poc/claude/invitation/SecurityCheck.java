@@ -12,6 +12,7 @@ public class SecurityCheck {
     private Integer       reliability;
     private String        securityNote;
     private String        securityReviewer;
+    private String        assignedTo;      // officer assigned by round-robin at creation
     private String        clarificationQuestion;
     private String        clarificationAnswer;
     private Integer       clarificationCount;
@@ -50,6 +51,8 @@ public class SecurityCheck {
     public void          setSecurityNote(String v)    { this.securityNote = v; }
     public String        getSecurityReviewer()        { return securityReviewer; }
     public void          setSecurityReviewer(String v){ this.securityReviewer = v; }
+    public String        getAssignedTo()              { return assignedTo; }
+    public void          setAssignedTo(String v)      { this.assignedTo = v; }
     public String        getClarificationQuestion()   { return clarificationQuestion; }
     public void          setClarificationQuestion(String v) { this.clarificationQuestion = v; }
     public String        getClarificationAnswer()     { return clarificationAnswer; }

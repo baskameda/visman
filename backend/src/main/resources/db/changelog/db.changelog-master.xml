@@ -13,6 +13,7 @@
     <include file="changes/006-invitation-tables.xml"   relativeToChangelogFile="true"/>
     <include file="changes/007-security-check-table.xml" relativeToChangelogFile="true"/>
     <include file="changes/008-visit-table.xml"         relativeToChangelogFile="true"/>
-    <include file="changes/009-supervisor-assignment.xml" relativeToChangelogFile="true"/>
+    <include file="changes/009-supervisor-assignment.xml"  relativeToChangelogFile="true"/>
+    <include file="changes/010-security-assignment.xml"   relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

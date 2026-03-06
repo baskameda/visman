@@ -9,7 +9,8 @@ import {
   CheckCircleOutlined, CloseCircleOutlined, StopOutlined,
   BankOutlined, ToolOutlined, MailOutlined, PhoneOutlined,
   QuestionCircleOutlined, UnlockOutlined, UserOutlined,
-  LoginOutlined, CalendarOutlined,
+  LoginOutlined, CalendarOutlined, EyeOutlined, TeamOutlined,
+  PushpinOutlined,
 } from '@ant-design/icons'
 import Layout              from '../components/Layout'
 import Tx                  from '../components/Tx'
@@ -23,7 +24,9 @@ import { useSecurityStats } from '../hooks/useSecurityStats'
 import {
   getTasksByGroup, getTasksByAssignee, claimTask,
   getBlacklistedVisitors, clearBlacklisted,
-  getTaskLocalVariable, getSecurityCheck, decideSecurityCheck,
+  getTaskLocalVariable, decideSecurityCheck,
+  getPendingMineChecks, getPendingOthersChecks, getPendingSuperviseeChecks,
+  claimSecurityCheck,
 } from '../api/operatonApi'
 
 const { Title, Text } = Typography
@@ -99,35 +102,42 @@ function BlacklistPanel({ auth, t }) {
   )
 }
 
-// ── Security task card ────────────────────────────────────────────────────────
-function SecTaskCard({ task, sc, onAction }) {
+// ── Security check card ───────────────────────────────────────────────────────
+function SecCheckCard({ sc, task, onAction, onClaim, readOnly }) {
   const { t } = useTranslation()
+  const [claiming, setClaiming] = useState(false)
 
-  if (!sc) return (
-    <Card style={{ border: '1px solid #e8e8e8', borderRadius: 12 }} styles={{ body: { padding: 16 } }}>
-      <Spin size="small" />
-    </Card>
-  )
   const period = sc.startDate === sc.endDate
     ? sc.startDate
     : `${sc.startDate} → ${sc.endDate}`
+
+  const handleClaim = async () => {
+    setClaiming(true)
+    try { await onClaim(sc) }
+    finally { setClaiming(false) }
+  }
+
   return (
     <Card
       variant="borderless"
-      style={{ height: '100%', border: '1px solid #e8e8e8', borderRadius: 12, transition: 'box-shadow 0.2s' }}
+      style={{ height: '100%', border: '1px solid #e8e8e8', borderRadius: 12, transition: 'box-shadow 0.2s', opacity: readOnly ? 0.85 : 1 }}
       styles={{ body: { padding: 16, display: 'flex', flexDirection: 'column', height: '100%' } }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.10)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = ''}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <Text strong style={{ fontSize: 13 }}>{sc.visitorFirstName} {sc.visitorLastName}</Text>
-        <Tag color="warning" style={{ margin: 0 }}>Pending</Tag>
+        <Space size={4}>
+          {sc.securityReviewer && <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>{sc.securityReviewer}</Tag>}
+          <Tag color="warning" style={{ margin: 0 }}>Pending</Tag>
+        </Space>
       </div>
       <Space direction="vertical" size={4} style={{ flex: 1, marginBottom: 12 }}>
         {sc.visitorCompany   && <Space size={6}><BankOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>{sc.visitorCompany}</Text></Space>}
         {sc.visitorFunction  && <Space size={6}><ToolOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>{sc.visitorFunction}</Text></Space>}
         <Space size={6}><CalendarOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>{period}</Text></Space>
         <Space size={6}><LoginOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>{sc.entranceName}</Text></Space>
+        {sc.assignedTo && <Space size={6}><UserOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>Assigned to {sc.assignedTo}</Text></Space>}
         {sc.inviterUsername  && <Space size={6}><UserOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>Invited by {sc.inviterUsername}</Text></Space>}
         {sc.clarificationCount > 0 && (
           <Tag color="warning" style={{ fontSize: 11 }}>
@@ -136,10 +146,52 @@ function SecTaskCard({ task, sc, onAction }) {
         )}
       </Space>
       <Divider style={{ margin: '0 0 12px' }} />
-      <Button type="primary" block onClick={() => onAction(task, sc)}>
-        {t('security.actionLabel')}
-      </Button>
+      {readOnly ? (
+        <Button block disabled icon={<EyeOutlined />}>Read Only</Button>
+      ) : (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Button type="primary" block onClick={() => onAction(task, sc)} disabled={!task}>
+            {t('security.actionLabel')}
+          </Button>
+          {onClaim && (
+            <Button block icon={<PushpinOutlined />} loading={claiming} onClick={handleClaim}
+              style={{ borderColor: '#722ed1', color: '#722ed1' }}>
+              Claim
+            </Button>
+          )}
+        </Space>
+      )}
     </Card>
+  )
+}
+
+// ── Check grid ────────────────────────────────────────────────────────────────
+function CheckGrid({ checks, scToTask, onAction, onClaim, readOnly, emptyText, loading }) {
+  if (loading) return (
+    <Row gutter={[16, 16]}>
+      {[1, 2, 3].map(i => <Col key={i} xs={24} sm={12} md={8}><div style={{ height: 200, background: '#f5f5f5', borderRadius: 12 }} /></Col>)}
+    </Row>
+  )
+  if (checks.length === 0) return (
+    <div style={{ padding: 48, textAlign: 'center', border: '2px dashed #e8e8e8', borderRadius: 12 }}>
+      <SafetyCertificateOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
+      <div><Text type="secondary">{emptyText}</Text></div>
+    </div>
+  )
+  return (
+    <Row gutter={[16, 16]}>
+      {checks.map(sc => (
+        <Col key={sc.id} xs={24} sm={12} md={8}>
+          <SecCheckCard
+            sc={sc}
+            task={scToTask[sc.id]}
+            onAction={onAction}
+            onClaim={onClaim}
+            readOnly={readOnly}
+          />
+        </Col>
+      ))}
+    </Row>
   )
 }
 
@@ -147,12 +199,15 @@ function SecTaskCard({ task, sc, onAction }) {
 export default function SecurityDashboard() {
   const { auth }     = useAuth()
   const { t }        = useTranslation()
+  const isSupervisor = auth?.isSecuritySupervisor ?? false
 
-  const [tasks,       setTasks]       = useState([])
-  const [scData,      setScData]      = useState({})  // taskId → SecurityCheck
-  const [loading,     setLoading]     = useState(true)
-  const [error,       setError]       = useState('')
-  const [lastRefresh, setLastRefresh] = useState(null)
+  const [mineChecks,      setMineChecks]      = useState([])
+  const [othersChecks,    setOthersChecks]    = useState([])
+  const [superviseeChecks,setSuperviseeChecks] = useState([])
+  const [scToTask,        setScToTask]        = useState({})  // scId → bpmn task
+  const [loading,         setLoading]         = useState(true)
+  const [error,           setError]           = useState('')
+  const [lastRefresh,     setLastRefresh]     = useState(null)
 
   const [dialogOpen,        setDialogOpen]        = useState(false)
   const [activeTask,        setActiveTask]         = useState(null)
@@ -167,6 +222,7 @@ export default function SecurityDashboard() {
   const loadTasks = useCallback(async () => {
     setError('')
     try {
+      // Build scId → bpmn task map from all Security group tasks
       const [assigned, candidate] = await Promise.all([
         getTasksByAssignee(auth),
         getTasksByGroup(auth, 'Security'),
@@ -175,30 +231,37 @@ export default function SecurityDashboard() {
       for (const t of candidate) {
         if (!merged.find(x => x.id === t.id)) merged.push(t)
       }
-      const all = merged.filter(t => t.taskDefinitionKey === 'Activity_SecurityCheck_V2')
-      setTasks(all)
+      const secTasks = merged.filter(t => t.taskDefinitionKey === 'Activity_SecurityCheck_V2')
 
-      // Load security check data for each task
-      const newSCs = {}
-      await Promise.all(all.map(async task => {
+      const taskMap = {}
+      await Promise.all(secTasks.map(async task => {
         try {
           const varData = await getTaskLocalVariable(auth, task.id, 'securityCheckId')
-          newSCs[task.id] = await getSecurityCheck(auth, varData.value)
-        } catch { newSCs[task.id] = null }
+          taskMap[varData.value] = task
+        } catch {}
       }))
-      setScData(newSCs)
+      setScToTask(taskMap)
+
+      // Load categorised check lists from backend
+      const requests = [getPendingMineChecks(auth), getPendingOthersChecks(auth)]
+      if (isSupervisor) requests.push(getPendingSuperviseeChecks(auth))
+      const results = await Promise.all(requests)
+      setMineChecks(results[0])
+      setOthersChecks(results[1])
+      if (isSupervisor) setSuperviseeChecks(results[2])
+
       setLastRefresh(new Date())
     } catch (e) {
       setError(t('security.failedToLoad', { error: e.message ?? 'unknown' }))
     } finally { setLoading(false) }
-  }, [auth, t])
+  }, [auth, t, isSupervisor])
 
   useTaskSSE(loadTasks)
   const { stats: orgStats, loading: orgLoading, refresh: orgRefresh } = useOrgStats(auth)
   const { stats: secStats, loading: secLoading, refresh: secRefresh } = useSecurityStats(auth)
 
   const handleOpenDialog = async (task, sc) => {
-    try { await claimTask(auth, task.id) } catch {}
+    if (task) { try { await claimTask(auth, task.id) } catch {} }
     setActiveTask(task)
     setActiveSC(sc)
     setIdentityConfirmed(false)
@@ -209,10 +272,17 @@ export default function SecurityDashboard() {
     setDialogOpen(true)
   }
 
-  const handleClose = () => {
-    setDialogOpen(false)
-    setValidationErr('')
+  const handleClaim = async (sc) => {
+    try {
+      await claimSecurityCheck(auth, sc.id)
+      message.success(`Claimed check for ${sc.visitorFirstName} ${sc.visitorLastName}`)
+      await loadTasks()
+    } catch (e) {
+      message.error('Claim failed: ' + (e.response?.data?.message ?? e.message))
+    }
   }
+
+  const handleClose = () => { setDialogOpen(false); setValidationErr('') }
 
   const handleSubmit = async (decision) => {
     if (!identityConfirmed) { setValidationErr(t('security.identityRequired')); return }
@@ -257,55 +327,95 @@ export default function SecurityDashboard() {
     { key: 'entrance',label: <><LoginOutlined /> Entrance</>,  children: activeSC.entranceName },
   ].filter(Boolean) : []
 
+  const refreshBar = (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <Text type="secondary" style={{ fontSize: 13 }}>
+        {lastRefresh
+          ? <Tx k="common.liveUpdated" vars={{ time: lastRefresh.toLocaleTimeString() }} />
+          : <Tx k="common.connecting" />}
+      </Text>
+      <Tooltip title={t('common.refreshNow')}>
+        <Button icon={<ReloadOutlined />} onClick={loadTasks} loading={loading} />
+      </Tooltip>
+    </div>
+  )
+
   const tabItems = [
     {
-      key: '0',
+      key: 'mine',
       label: (
         <Space>
           <SafetyCertificateOutlined />
-          <Tx k="security.title" />
-          {tasks.length > 0 && <Tag color="warning" style={{ marginLeft: 4 }}>{tasks.length}</Tag>}
+          My Checks
+          {mineChecks.length > 0 && <Tag color="warning" style={{ marginLeft: 4 }}>{mineChecks.length}</Tag>}
         </Space>
       ),
       children: (
         <>
           {error && <Alert type="error" message={error} showIcon closable onClose={() => setError('')} style={{ marginBottom: 16 }} />}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Text type="secondary" style={{ fontSize: 13 }}>
-              {lastRefresh
-                ? <Tx k="common.liveUpdated" vars={{ time: lastRefresh.toLocaleTimeString() }} />
-                : <Tx k="common.connecting" />}
-            </Text>
-            <Tooltip title={t('common.refreshNow')}>
-              <Button icon={<ReloadOutlined />} onClick={loadTasks} loading={loading} />
-            </Tooltip>
-          </div>
-          <Text strong style={{ display: 'block', marginBottom: 12 }}>
-            <Tx k="security.pendingCount" vars={{ count: tasks.length }} />
-          </Text>
-          {loading ? (
-            <Row gutter={[16, 16]}>
-              {[1,2,3].map(i => <Col key={i} xs={24} sm={12} md={8}><div style={{ height: 200, background: '#f5f5f5', borderRadius: 12 }} /></Col>)}
-            </Row>
-          ) : tasks.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center', border: '2px dashed #e8e8e8', borderRadius: 12 }}>
-              <SafetyCertificateOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
-              <div><Text type="secondary"><Tx k="security.emptyState" /></Text></div>
-            </div>
-          ) : (
-            <Row gutter={[16, 16]}>
-              {tasks.map(task => (
-                <Col key={task.id} xs={24} sm={12} md={8}>
-                  <SecTaskCard task={task} sc={scData[task.id]} onAction={handleOpenDialog} />
-                </Col>
-              ))}
-            </Row>
-          )}
+          {refreshBar}
+          <CheckGrid
+            checks={mineChecks}
+            scToTask={scToTask}
+            onAction={handleOpenDialog}
+            onClaim={null}
+            readOnly={false}
+            emptyText={t('security.emptyState')}
+            loading={loading}
+          />
         </>
       ),
     },
     {
-      key: '1',
+      key: 'others',
+      label: (
+        <Space>
+          <EyeOutlined />
+          Others
+          {othersChecks.length > 0 && <Tag color="default" style={{ marginLeft: 4 }}>{othersChecks.length}</Tag>}
+        </Space>
+      ),
+      children: (
+        <>
+          <Alert type="info" showIcon message="Checks assigned to other officers — read only." style={{ marginBottom: 16 }} />
+          <CheckGrid
+            checks={othersChecks}
+            scToTask={scToTask}
+            onAction={handleOpenDialog}
+            onClaim={null}
+            readOnly={true}
+            emptyText="No checks assigned to other officers."
+            loading={loading}
+          />
+        </>
+      ),
+    },
+    ...(isSupervisor ? [{
+      key: 'supervised',
+      label: (
+        <Space>
+          <TeamOutlined />
+          Supervised
+          {superviseeChecks.length > 0 && <Tag color="purple" style={{ marginLeft: 4 }}>{superviseeChecks.length}</Tag>}
+        </Space>
+      ),
+      children: (
+        <>
+          <Alert type="info" showIcon message="Pending checks of your supervisees. You can decide or claim ownership." style={{ marginBottom: 16 }} />
+          <CheckGrid
+            checks={superviseeChecks}
+            scToTask={scToTask}
+            onAction={handleOpenDialog}
+            onClaim={handleClaim}
+            readOnly={false}
+            emptyText="No pending checks for your supervisees."
+            loading={loading}
+          />
+        </>
+      ),
+    }] : []),
+    {
+      key: 'blacklist',
       label: (
         <Space>
           <StopOutlined />
@@ -388,7 +498,7 @@ export default function SecurityDashboard() {
           </Checkbox>
         </div>
 
-        {/* Reliability score (for APPROVE) */}
+        {/* Reliability score */}
         <div style={{ marginBottom: 12 }}>
           <Text strong style={{ display: 'block', marginBottom: 6 }}>
             Reliability Score (for Approve): <Tag color={reliability > 60 ? 'success' : reliability > 30 ? 'warning' : 'error'}>{reliability}</Tag>

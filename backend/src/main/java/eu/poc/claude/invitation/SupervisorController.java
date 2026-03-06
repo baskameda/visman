@@ -15,16 +15,19 @@ import java.util.Map;
 @RequestMapping("/api/supervisor")
 public class SupervisorController {
 
-    private final SupervisorRepository   supervisorRepo;
-    private final InvitationRepository   invitationRepo;
-    private final IdentityService        identityService;
+    private final SupervisorRepository         supervisorRepo;
+    private final SecuritySupervisorRepository securitySupervisorRepo;
+    private final InvitationRepository         invitationRepo;
+    private final IdentityService              identityService;
 
     public SupervisorController(SupervisorRepository supervisorRepo,
+                                 SecuritySupervisorRepository securitySupervisorRepo,
                                  InvitationRepository invitationRepo,
                                  IdentityService identityService) {
-        this.supervisorRepo  = supervisorRepo;
-        this.invitationRepo  = invitationRepo;
-        this.identityService = identityService;
+        this.supervisorRepo         = supervisorRepo;
+        this.securitySupervisorRepo = securitySupervisorRepo;
+        this.invitationRepo         = invitationRepo;
+        this.identityService        = identityService;
     }
 
     // ── GET /api/supervisor/am-i-supervisor ───────────────────────────────────
@@ -143,9 +146,65 @@ public class SupervisorController {
             .toList();
     }
 
+    // ── Security supervisor endpoints ─────────────────────────────────────────
+
+    @GetMapping("/security/am-i-supervisor")
+    public Map<String, Boolean> amISecuritySupervisor(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String username = requireUsername(authHeader);
+        return Map.of("supervisor", securitySupervisorRepo.isSupervisor(username));
+    }
+
+    @GetMapping("/security/assignments")
+    public List<SecuritySupervisorRepository.Assignment> listSecurityAssignments(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        requireAdmin(authHeader);
+        return securitySupervisorRepo.findAll();
+    }
+
+    @PutMapping("/security/assignments")
+    public ResponseEntity<Void> assignSecurity(
+            @RequestBody SecurityAssignmentRequest req,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        requireAdmin(authHeader);
+        String current = securitySupervisorRepo.findSupervisorOf(req.officerUsername());
+        if (!req.supervisorUsername().equals(current)) {
+            int count = securitySupervisorRepo.countSupervisees(req.supervisorUsername());
+            if (count >= 10)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    req.supervisorUsername() + " already supervises 10 officers — maximum reached");
+        }
+        securitySupervisorRepo.assign(req.officerUsername(), req.supervisorUsername());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/security/assignments/{officerUsername}")
+    public ResponseEntity<Void> removeSecurity(
+            @PathVariable String officerUsername,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        requireAdmin(authHeader);
+        securitySupervisorRepo.remove(officerUsername);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/security/officers")
+    public List<Map<String, String>> listSecurityOfficers(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        requireAdmin(authHeader);
+        List<User> users = identityService.createUserQuery().memberOfGroup("Security").list();
+        return users.stream()
+            .map(u -> Map.of(
+                "username",  u.getId(),
+                "firstName", u.getFirstName() != null ? u.getFirstName() : "",
+                "lastName",  u.getLastName()  != null ? u.getLastName()  : ""))
+            .toList();
+    }
+
     // ── Request DTOs ──────────────────────────────────────────────────────────
 
     public record AssignmentRequest(String inviterUsername, String supervisorUsername) {}
+
+    public record SecurityAssignmentRequest(String officerUsername, String supervisorUsername) {}
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
