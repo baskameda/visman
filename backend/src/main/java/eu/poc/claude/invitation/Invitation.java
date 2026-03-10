@@ -72,6 +72,10 @@ public class Invitation {
         private String       securityCheckStatus;
         private Integer      reliability;
         private List<VisitSummary> visits;
+        private String       assignedTo;
+        private String       securityReviewer;
+        private Integer      clarificationCount;
+        private String       clarificationQuestion;
 
         public Long    getVisitorId()             { return visitorId; }
         public void    setVisitorId(Long v)       { this.visitorId = v; }
@@ -89,6 +93,14 @@ public class Invitation {
         public void    setReliability(Integer v)  { this.reliability = v; }
         public List<VisitSummary> getVisits()     { return visits; }
         public void    setVisits(List<VisitSummary> v) { this.visits = v; }
+        public String  getAssignedTo()            { return assignedTo; }
+        public void    setAssignedTo(String v)    { this.assignedTo = v; }
+        public String  getSecurityReviewer()      { return securityReviewer; }
+        public void    setSecurityReviewer(String v) { this.securityReviewer = v; }
+        public Integer getClarificationCount()    { return clarificationCount; }
+        public void    setClarificationCount(Integer v) { this.clarificationCount = v; }
+        public String  getClarificationQuestion() { return clarificationQuestion; }
+        public void    setClarificationQuestion(String v) { this.clarificationQuestion = v; }
     }
 
     public static class VisitSummary {

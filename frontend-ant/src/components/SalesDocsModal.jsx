@@ -22,7 +22,18 @@ const comparisonData = [
   { feature: 'Gamification & insights',         poc: true,  paper: false, saas: false },
   { feature: 'Multi-visitor invitations',       poc: true,  paper: false, saas: true  },
   { feature: 'Supervisor override hierarchy',   poc: true,  paper: false, saas: false },
+  { feature: 'Multi-location facility support', poc: true,  paper: false, saas: false },
+  { feature: 'Interactive map with coordinates',poc: true,  paper: false, saas: false },
   { feature: 'In-browser label editing',        poc: true,  paper: false, saas: false },
+  { feature: 'Mobile PWA for security officers',poc: true,  paper: false, saas: false },
+  { feature: 'Month-grouped invitation history', poc: true, paper: false, saas: false },
+  { feature: 'Offline-first mobile for gatekeepers', poc: true, paper: false, saas: false },
+  { feature: 'GPS-stamped check-ins',                poc: true, paper: false, saas: false },
+  { feature: 'Multi-site / global deployment',       poc: true, paper: false, saas: true  },
+  { feature: 'Location-scoped role assignments & supervisor hierarchies', poc: true, paper: false, saas: false },
+  { feature: 'Licence-controlled feature activation (AES-256-GCM .lic file)', poc: true, paper: false, saas: false },
+  { feature: 'Admin QA notes & support test summary per role',               poc: true, paper: false, saas: false },
+  { feature: 'WCAG 2.1 AA / European Accessibility Act compliant',           poc: true, paper: false, saas: false },
 ]
 
 const TABS = [
@@ -37,14 +48,19 @@ const TABS = [
         </Paragraph>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
           <Metric value="5" label="Coordinated roles" color="#1677ff" />
-          <Metric value="N" label="Visitors per invitation" color="#d46b08" />
-          <Metric value="6" label="Languages" color="#531dab" />
+          <Metric value="6" label="Global locations" color="#d46b08" />
+          <Metric value="214" label="Demo users" color="#531dab" />
           <Metric value="100%" label="Audit trail" color="#389e0d" />
         </div>
         <Paragraph style={{ fontSize: 13 }}>
           The system orchestrates five roles — <strong>Inviter</strong>, <strong>Supervisor</strong>, <strong>Security</strong>, <strong>Gatekeeper</strong>, and <strong>Admin</strong> — through
           a fully automated BPMN process. Every action is logged, every decision is traceable, and every
           escalation path is built in.
+        </Paragraph>
+        <Paragraph style={{ fontSize: 13 }}>
+          The included demo dataset spans <strong>6 global offices</strong>, <strong>60 entrances</strong>, <strong>3 000 visitors</strong>,
+          and <strong>~44 000 check-in records</strong> generated across one full year of simulated activity —
+          providing a realistic load profile for evaluation and stress testing out of the box.
         </Paragraph>
       </div>
     ),
@@ -60,6 +76,7 @@ const TABS = [
           'Multi-visitor invitations — one form, N visitors, N security checks in parallel',
           'Reliability scoring — data-driven security decisions with historical context',
           'Supervisor oversight — escalation path without disrupting the primary workflow',
+          'Multi-site ready — locations with independent entrance rosters, gatekeeper pools, and supervisor hierarchies',
         ].map(b => (
           <div key={b} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
             <CheckOutlined style={{ color: '#52c41a', marginTop: 2 }} />
@@ -74,6 +91,8 @@ const TABS = [
           'On-premise deployment — visitor data never leaves your infrastructure',
           'i18n out of the box — 6 languages, labels editable in-browser without deployment',
           'Blacklist enforcement — flagged visitors automatically blocked at invitation creation',
+          'Licence management — AES-256-GCM encrypted .lic files control which feature sets are active; admin generates, verifies, and applies licences without code changes',
+          'WCAG 2.1 AA / EAA compliant — keyboard navigation, screen-reader landmarks, focus management, skip-to-content, reduced-motion support, and accessible colour contrast across all 6 languages meet European Accessibility Act requirements',
         ].map(b => (
           <div key={b} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
             <CheckOutlined style={{ color: '#52c41a', marginTop: 2 }} />
@@ -87,6 +106,13 @@ const TABS = [
           'Gatekeeper insights — streak tracking, on-time rate, busiest hour, rank progression',
           'Inviter gamification — milestones, approval rate badges, invitation streaks',
           'Org-level dashboard — admin overview of all active processes and user activity',
+          'Mobile PWA for Security Officers — native-feel app installable on any smartphone',
+          'Month-grouped invitation history — lazy-loaded per month, current month always at top',
+          'Offline-first gatekeeper app — check-ins work without internet, GPS coordinates captured',
+          'My Performance page — role-specific gamification stats on a dedicated /performance route',
+          'Auto-logout after 9 hours — session timer shown in header with colour-coded urgency',
+          'Role adoption pages — per-role consensus modals (Inviter / Security / Gatekeeper) listing 5 newly-possible capabilities with mobile-app callout; fully translated in 6 languages',
+          'Why Us modal — cinematic brochure-style marketing page on the login screen; translated in 6 languages',
         ].map(b => (
           <div key={b} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
             <CheckOutlined style={{ color: '#52c41a', marginTop: 2 }} />
@@ -152,10 +178,20 @@ const TABS = [
               'React + Spring Boot + Operaton (open-source)',
               'Multi-visitor invitations with parallel security checks',
               'Full clarification loop with auto-refuse at 5 attempts',
-              'Supervisor hierarchy — oversight without disruption',
+              'Supervisor hierarchy (Inviter, Security, Gatekeeper) — oversight without disruption',
+              'Multi-location support — each location has its own entrances and gatekeepers',
+              'Interactive location map with coordinate picker (Leaflet, centered on Europe)',
+              'Check-in analytics chart per entrance per day (D3 stacked bar)',
               'Gatekeeper lazy-loading weekly calendar',
               '6 languages + live label editor',
               'Gamification & org dashboard',
+              'Mobile PWA for Security Officers — installable, works offline, HTTPS',
+              'Month-grouped invitation history with lazy loading per month',
+              'Login role filter — location → role → name search for fast user selection',
+              'Offline-first gatekeeper PWA — check-ins work without internet, GPS coordinates captured, auto-sync on reconnect',
+              'Multi-site deployment — 6 global offices pre-loaded (Commanders Desk, Paris, Rome, London, Beijing, Los Angeles); 214 users, 60 entrances, ~44 000 check-in records across one year of simulated activity',
+              'Licence management — admin generates encrypted .lic files (AES-256-GCM) to control which of the four feature sets (Security, Inviter, Gatekeeper, Gamification) are active; feature gating enforced at route, nav, and API layers with auto-logout on deactivation',
+              'QA documentation — role-aware test summary modal for support staff classifying regressions vs. new defects',
             ],
           },
           {

@@ -65,4 +65,22 @@ public class Visit {
     public void      setInvitationEndDate(LocalDate v)  { this.invitationEndDate = v; }
     public String    getInviterUsername()               { return inviterUsername; }
     public void      setInviterUsername(String v)       { this.inviterUsername = v; }
+
+    // ── GPS coordinates (populated from mobile check-ins) ────────────────────
+    private Double checkinLat;
+    private Double checkinLng;
+    public Double  getCheckinLat()                      { return checkinLat; }
+    public void    setCheckinLat(Double v)              { this.checkinLat = v; }
+    public Double  getCheckinLng()                      { return checkinLng; }
+    public void    setCheckinLng(Double v)              { this.checkinLng = v; }
+
+    // ── Supervisor view (populated only in /supervisees endpoint) ─────────────
+    private String responsibleGatekeeper;
+    public String  getResponsibleGatekeeper()           { return responsibleGatekeeper; }
+    public void    setResponsibleGatekeeper(String v)   { this.responsibleGatekeeper = v; }
+
+    // ── Security approver (COALESCE of security_reviewer, assigned_to) ────────
+    private String securityApprover;
+    public String  getSecurityApprover()                { return securityApprover; }
+    public void    setSecurityApprover(String v)        { this.securityApprover = v; }
 }

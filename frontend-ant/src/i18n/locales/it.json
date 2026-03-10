@@ -23,7 +23,12 @@
     "admin": "Amministrazione",
     "dashboard": "Dashboard",
     "signOut": "Esci",
-    "language": "Lingua"
+    "language": "Lingua",
+    "locations": "Sedi",
+    "entrances": "Ingressi",
+    "supervisorAdmin": "Assegnazioni supervisori",
+    "myPerformance": "Le mie Prestazioni",
+    "whyUs": "Perché noi — La nostra Visione"
   },
   "roles": {
     "INVITER": "Invitante",
@@ -37,7 +42,11 @@
     "securityReview": "Revisione sicurezza",
     "gateEntry": "Controllo accessi",
     "administration": "Amministrazione",
-    "visitorManagement": "Gestione visitatori"
+    "visitorManagement": "Gestione visitatori",
+    "locations": "Sedi",
+    "entrances": "Ingressi",
+    "supervisorAdmin": "Assegnazioni supervisori",
+    "myPerformance": "Le mie Prestazioni"
   },
   "login": {
     "title": "Gestione visitatori",
@@ -279,5 +288,71 @@
     "de": "Deutsch",
     "zh": "中文",
     "ru": "Русский"
+  },
+  "session": {
+    "timeLeft": "Tempo rimanente prima del logout:"
+  },
+  "roleAdoption": {
+    "subtitle": "Cosa è diventato possibile che prima non lo era:",
+    "inviter": {
+      "link": "VisMan per gli Invitanti",
+      "title": "VisMan per gli Invitanti",
+      "i1": "Invitare più visitatori contemporaneamente — un solo modulo, niente email a catena, niente telefonate",
+      "i2": "Seguire ogni invito in tempo reale, dalla presentazione fino al controllo accessi",
+      "i3": "Rispondere istantaneamente alle domande di sicurezza, da qualsiasi luogo e dispositivo",
+      "i4": "La cronologia completa degli inviti — ricercabile, mese per mese — sempre a portata di mano",
+      "i5": "Se sei indisponibile, il tuo supervisore interviene direttamente — niente si blocca",
+      "mobile": "VisMan funziona nel browser su qualsiasi dispositivo. Nessuna installazione, nessun ticket IT."
+    },
+    "security": {
+      "link": "VisMan per la Sicurezza",
+      "title": "VisMan per la Sicurezza",
+      "i1": "Esaminare e decidere le richieste dei visitatori dallo smartphone — l'app mobile funziona ovunque",
+      "i2": "Ogni visitatore viene con un punteggio di affidabilità basato su dati storici reali",
+      "i3": "Porre una domanda di chiarimento all'invitante nel sistema — tracciato, registrato, senza email",
+      "i4": "Rifiutare o inserire nella lista nera con un clic — il blocco si applica automaticamente a tutte le visite future",
+      "i5": "Ogni decisione è registrata con timestamp — nessun registro manuale, nessuna nota di consegna",
+      "mobile": "Installa l'app VisMan Sicurezza su qualsiasi smartphone. Gestisci i compiti sul campo, senza VPN."
+    },
+    "gatekeeper": {
+      "link": "VisMan per i Portieri",
+      "title": "VisMan per i Portieri",
+      "i1": "Vedere tutti i visitatori attesi prima del loro arrivo — nessuna sorpresa, nessuna lista cartacea",
+      "i2": "Fare il check-in dei visitatori dal telefono, anche senza internet — l'app funziona completamente offline",
+      "i3": "I check-in con timbro GPS registrano esattamente dove e quando — automatico, zero burocrazia",
+      "i4": "Il programma settimanale organizzato per giorno, aggiornato in tempo reale, sempre visibile",
+      "i5": "Le tue prestazioni — serie, puntualità, classifica — monitorate automaticamente e mostrate a te",
+      "mobile": "Installa l'app VisMan Portiere sul telefono come un'app nativa. Nessun laptop aziendale necessario all'ingresso."
+    }
+  },
+  "whyUs": {
+    "heroSuper": "Gestione visitatori — reinventata",
+    "heroTitle": "Perché noi — La nostra Visione",
+    "heroText": "Il futuro del controllo accessi sicuro e centrato sulle persone non è un registro di firma. È un flusso di lavoro vivo — uno che rispetta i tuoi dipendenti, protegge i tuoi locali e fornisce a ogni membro del team lo strumento giusto per il suo ruolo.",
+    "problemTitle": "Il problema di cui nessuno parla",
+    "problemText": "Ogni giorno, migliaia di dipendenti trascorrono minuti — a volte ore — a inseguire approvazioni per visitatori via email, telefono e fogli di calcolo condivisi. Gli agenti di sicurezza prendono decisioni senza contesto. I portieri respingono o lasciano passare persone che non riescono a verificare. I team di conformità vanno nel panico quando un revisore chiede chi era nell'edificio martedì scorso. Il costo non è solo attrito — è rischio.",
+    "solutionTitle": "La nostra risposta",
+    "solutionText1": "Abbiamo costruito un sistema in cui ogni ruolo dispone esattamente dell'interfaccia di cui ha bisogno, collegato da un flusso di lavoro BPMN trasparente e verificabile. Il mittente compila un solo modulo. La sicurezza ottiene il contesto completo, la cronologia e un punteggio di affidabilità. Il portiere vede gli arrivi previsti del giorno su uno schermo mobile chiaro. L'amministratore vede tutto, in tempo reale, in ogni sede.",
+    "solutionText2": "Niente email. Niente fogli di calcolo. Niente congetture. Solo un processo calmo e strutturato — costruito per migliorare la vita lavorativa del tuo team.",
+    "diffTitle": "Cosa ci distingue",
+    "f1title": "Zero dipendenza dal fornitore",
+    "f1desc": "Motore BPM Operaton open-source. I tuoi dati rimangono sempre sulla tua infrastruttura.",
+    "f2title": "Workflow visivi e adattabili",
+    "f2desc": "Processi BPMN che il tuo team può leggere, modificare ed evolvere — senza codice.",
+    "f3title": "Design orientato ai ruoli",
+    "f3desc": "Tre app dedicate — desktop, PWA mobile, PWA portiere — ognuna progettata per un compito.",
+    "f4title": "Conformità integrata",
+    "f4desc": "Ogni azione con timestamp e memorizzata. Pista di controllo completa, sempre pronta, zero sforzo aggiuntivo.",
+    "f5title": "Globale per impostazione predefinita",
+    "f5desc": "Sei lingue integrate. Supporto multi-sede con roster di ingresso e gerarchie di supervisori indipendenti.",
+    "f6title": "Funziona ovunque",
+    "f6desc": "L'app portiere offline sincronizza i check-in con timbro GPS non appena la connettività ritorna.",
+    "statsLocations": "Sedi globali",
+    "statsRoles": "Ruoli coordinati",
+    "statsCheckins": "Check-in annuali",
+    "statsAudit": "Copertura audit",
+    "ctaTitle": "Il prossimo passo",
+    "ctaText": "Questo sistema non è un prototipo — è una prova di concetto completamente funzionante con sei uffici globali, 214 utenti e un anno di attività simulata. Ogni funzionalità che vedi è live, testabile e pronta per essere valutata rispetto ai tuoi requisiti reali.",
+    "ctaQuote": "\"Non ci siamo proposti di costruire un modulo visitatore. Ci siamo proposti di dare a ogni persona che varca le tue porte — e a ogni persona che l'ha invitata — un'esperienza memorabile.\""
   }
 }

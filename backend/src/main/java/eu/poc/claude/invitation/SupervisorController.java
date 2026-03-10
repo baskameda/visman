@@ -15,19 +15,22 @@ import java.util.Map;
 @RequestMapping("/api/supervisor")
 public class SupervisorController {
 
-    private final SupervisorRepository         supervisorRepo;
-    private final SecuritySupervisorRepository securitySupervisorRepo;
-    private final InvitationRepository         invitationRepo;
-    private final IdentityService              identityService;
+    private final SupervisorRepository            supervisorRepo;
+    private final SecuritySupervisorRepository    securitySupervisorRepo;
+    private final GatekeeperSupervisorRepository  gatekeeperSupervisorRepo;
+    private final InvitationRepository            invitationRepo;
+    private final IdentityService                 identityService;
 
     public SupervisorController(SupervisorRepository supervisorRepo,
                                  SecuritySupervisorRepository securitySupervisorRepo,
+                                 GatekeeperSupervisorRepository gatekeeperSupervisorRepo,
                                  InvitationRepository invitationRepo,
                                  IdentityService identityService) {
-        this.supervisorRepo         = supervisorRepo;
-        this.securitySupervisorRepo = securitySupervisorRepo;
-        this.invitationRepo         = invitationRepo;
-        this.identityService        = identityService;
+        this.supervisorRepo            = supervisorRepo;
+        this.securitySupervisorRepo    = securitySupervisorRepo;
+        this.gatekeeperSupervisorRepo  = gatekeeperSupervisorRepo;
+        this.invitationRepo            = invitationRepo;
+        this.identityService           = identityService;
     }
 
     // ── GET /api/supervisor/am-i-supervisor ───────────────────────────────────
@@ -84,6 +87,16 @@ public class SupervisorController {
         invitationRepo.updateInviterUsername(invitationId, username);
 
         return ResponseEntity.noContent().build();
+    }
+
+    // ── GET /api/supervisor/my-supervisees ───────────────────────────────────
+
+    @GetMapping("/my-supervisees")
+    public List<String> mySupervisees(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String username = requireUsername(authHeader);
+        if (!supervisorRepo.isSupervisor(username)) return List.of();
+        return supervisorRepo.findSupervisees(username);
     }
 
     // ── Admin: GET /api/supervisor/assignments ────────────────────────────────
@@ -155,6 +168,14 @@ public class SupervisorController {
         return Map.of("supervisor", securitySupervisorRepo.isSupervisor(username));
     }
 
+    @GetMapping("/security/my-supervisees")
+    public List<String> mySecuritySupervisees(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String username = requireUsername(authHeader);
+        if (!securitySupervisorRepo.isSupervisor(username)) return List.of();
+        return securitySupervisorRepo.findSupervisees(username);
+    }
+
     @GetMapping("/security/assignments")
     public List<SecuritySupervisorRepository.Assignment> listSecurityAssignments(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
@@ -205,6 +226,70 @@ public class SupervisorController {
     public record AssignmentRequest(String inviterUsername, String supervisorUsername) {}
 
     public record SecurityAssignmentRequest(String officerUsername, String supervisorUsername) {}
+
+    // ── Gatekeeper supervisor endpoints ──────────────────────────────────────
+
+    @GetMapping("/gatekeeper/am-i-supervisor")
+    public Map<String, Boolean> amIGatekeeperSupervisor(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String username = requireUsername(authHeader);
+        return Map.of("supervisor", gatekeeperSupervisorRepo.isSupervisor(username));
+    }
+
+    @GetMapping("/gatekeeper/my-supervisees")
+    public List<String> myGatekeeperSupervisees(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String username = requireUsername(authHeader);
+        if (!gatekeeperSupervisorRepo.isSupervisor(username)) return List.of();
+        return gatekeeperSupervisorRepo.findSupervisees(username);
+    }
+
+    @GetMapping("/gatekeeper/assignments")
+    public List<GatekeeperSupervisorRepository.Assignment> listGatekeeperAssignments(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        requireAdmin(authHeader);
+        return gatekeeperSupervisorRepo.findAll();
+    }
+
+    @PutMapping("/gatekeeper/assignments")
+    public ResponseEntity<Void> assignGatekeeper(
+            @RequestBody GatekeeperAssignmentRequest req,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        requireAdmin(authHeader);
+        String current = gatekeeperSupervisorRepo.findSupervisorOf(req.porterUsername());
+        if (!req.supervisorUsername().equals(current)) {
+            int count = gatekeeperSupervisorRepo.countSupervisees(req.supervisorUsername());
+            if (count >= 10)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    req.supervisorUsername() + " already supervises 10 gatekeepers — maximum reached");
+        }
+        gatekeeperSupervisorRepo.assign(req.porterUsername(), req.supervisorUsername());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/gatekeeper/assignments/{porterUsername}")
+    public ResponseEntity<Void> removeGatekeeper(
+            @PathVariable String porterUsername,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        requireAdmin(authHeader);
+        gatekeeperSupervisorRepo.remove(porterUsername);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/gatekeeper/officers")
+    public List<Map<String, String>> listGatekeeperOfficers(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        requireAdmin(authHeader);
+        List<User> users = identityService.createUserQuery().memberOfGroup("Porters").list();
+        return users.stream()
+            .map(u -> Map.of(
+                "username",  u.getId(),
+                "firstName", u.getFirstName() != null ? u.getFirstName() : "",
+                "lastName",  u.getLastName()  != null ? u.getLastName()  : ""))
+            .toList();
+    }
+
+    public record GatekeeperAssignmentRequest(String porterUsername, String supervisorUsername) {}
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

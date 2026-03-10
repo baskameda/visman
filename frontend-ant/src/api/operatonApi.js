@@ -27,6 +27,11 @@ export async function getUserGroups(credentials) {
   return res.data // array of { id, name, type }
 }
 
+export async function getUserProfile(credentials) {
+  const res = await client(credentials).get(`/user/${encodeURIComponent(credentials.username)}/profile`)
+  return res.data // { id, firstName, lastName, email }
+}
+
 // ─── Process ─────────────────────────────────────────────────────────────────
 
 const PROCESS_KEY = 'VisitProcess_2.0'
@@ -235,7 +240,7 @@ export async function createSuperheroAdmin() {
       lastName:  'Admin',
       email:     'superhero@visitor-poc.local',
     },
-    credentials: { password: 'test123' },
+    credentials: { password: 'superhero' },
   })
 
   // Add to webAdmins
@@ -265,6 +270,17 @@ export async function updateUser(credentials, userId, { firstName, lastName, ema
 /** Update a user's password. */
 export async function updateUserPassword(credentials, userId, newPassword) {
   await client(credentials).put(`/user/${userId}/credentials`, { password: newPassword })
+}
+
+/** Get all users using the system admin account. */
+export async function getAllUsersAsAdmin() {
+  const res = await client(SYSTEM_CREDS).get('/user', { params: { maxResults: 1000 } })
+  return res.data
+}
+
+/** Reset a user's password to their userId using the system admin account. */
+export async function resetPasswordToUserId(userId) {
+  await client(SYSTEM_CREDS).put(`/user/${userId}/credentials`, { password: userId })
 }
 
 // ─── Group management ─────────────────────────────────────────────────────────
@@ -368,19 +384,54 @@ export async function getBlacklistedVisitors(credentials) {
 }
 
 
-// ─── Entrances ────────────────────────────────────────────────────────────────
+// ─── Locations ────────────────────────────────────────────────────────────────
 
 const _ah = (creds) =>
   ({ Authorization: 'Basic ' + btoa(`${creds.username}:${creds.password}`) })
 
-export async function getEntrances(credentials) {
-  const res = await axios.get(`${API_BASE}/entrances`, { headers: _ah(credentials) })
+/** All locations — public, no auth required (used on login page). */
+export async function getLocations(credentials) {
+  const headers = credentials ? _ah(credentials) : {}
+  const res = await axios.get(`${API_BASE}/locations`, { headers })
+  return res.data
+}
+
+/** Users assigned to a location — public, no auth required (used on login page). */
+export async function getUsersByLocation(locationId) {
+  const res = await axios.get(`${API_BASE}/locations/${locationId}/users`)
+  return res.data // [{ id, firstName, lastName }]
+}
+
+export async function createLocation(credentials, location) {
+  const res = await axios.post(`${API_BASE}/locations`, location, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function updateLocation(credentials, id, location) {
+  await axios.put(`${API_BASE}/locations/${id}`, location, { headers: _ah(credentials) })
+}
+
+export async function deleteLocation(credentials, id) {
+  await axios.delete(`${API_BASE}/locations/${id}`, { headers: _ah(credentials) })
+}
+
+// ─── Entrances ────────────────────────────────────────────────────────────────
+
+export async function getEntrances(credentials, locationId = null) {
+  const params = locationId != null ? { locationId } : {}
+  const res = await axios.get(`${API_BASE}/entrances`, { headers: _ah(credentials), params })
   return res.data
 }
 
 export async function createEntrance(credentials, entrance) {
   const res = await axios.post(`${API_BASE}/entrances`, entrance, { headers: _ah(credentials) })
   return res.data
+}
+
+export async function getGatekeepersInOtherLocations(credentials, locationId) {
+  const res = await axios.get(`${API_BASE}/entrances/gatekeepers-in-other-locations`,
+    { headers: _ah(credentials), params: { locationId } })
+  return res.data // string[] of usernames to exclude
 }
 
 export async function updateEntrance(credentials, id, entrance) {
@@ -398,6 +449,25 @@ export async function getEntranceGatekeepers(credentials, entranceId) {
 
 export async function setEntranceGatekeepers(credentials, entranceId, usernames) {
   await axios.put(`${API_BASE}/entrances/${entranceId}/gatekeepers`, usernames, { headers: _ah(credentials) })
+}
+
+/** Admin: Sankey flow data — Inviter → Security → Gatekeeper → Entrance. */
+export async function getVisitSankeyStats(credentials, days = 90) {
+  const res = await axios.get(`${API_BASE}/visits/stats/sankey`, {
+    params: { days },
+    headers: _ah(credentials),
+  })
+  return res.data // { nodes, links, refused }
+}
+
+export async function getCheckinsByEntranceAndDay(credentials, days = 30, locationId = null) {
+  const params = { days }
+  if (locationId != null) params.locationId = locationId
+  const res = await axios.get(`${API_BASE}/visits/stats/checkins-per-entrance-day`, {
+    params,
+    headers: _ah(credentials),
+  })
+  return res.data // [{ date, entranceId, entranceName, count }]
 }
 
 export async function getMyEntrances(credentials) {
@@ -425,9 +495,16 @@ export async function createInvitation(credentials, body) {
 }
 
 /** All invitations created by the authenticated user (with computed status). */
-export async function getMyInvitations(credentials) {
-  const res = await axios.get(`${API_BASE}/invitations/my`, { headers: _ah(credentials) })
+export async function getMyInvitations(credentials, year, month) {
+  const params = (year != null && month != null) ? { year, month } : {}
+  const res = await axios.get(`${API_BASE}/invitations/my`, { headers: _ah(credentials), params })
   return res.data
+}
+
+/** Available months (year + month + count) for the inviter's invitation history. */
+export async function getMyInvitationMonths(credentials) {
+  const res = await axios.get(`${API_BASE}/invitations/my/months`, { headers: _ah(credentials) })
+  return res.data // [{ year, month, count }]
 }
 
 /** Full invitation detail: visitors, their security-check statuses, and visit summaries. */
@@ -530,6 +607,11 @@ export async function getSuperviseeInvitations(credentials) {
   return res.data
 }
 
+export async function getMySupervisees(credentials) {
+  const res = await axios.get(`${API_BASE}/supervisor/my-supervisees`, { headers: _ah(credentials) })
+  return res.data // string[]
+}
+
 export async function claimInvitation(credentials, invitationId, visitorId) {
   await axios.post(`${API_BASE}/supervisor/claim/${invitationId}/visitor/${visitorId}`, null, {
     headers: _ah(credentials),
@@ -563,6 +645,11 @@ export async function getSupervisableInviters(credentials) {
 export async function amISecuritySupervisor(credentials) {
   const res = await axios.get(`${API_BASE}/supervisor/security/am-i-supervisor`, { headers: _ah(credentials) })
   return res.data // { supervisor: true/false }
+}
+
+export async function getMySecuritySupervisees(credentials) {
+  const res = await axios.get(`${API_BASE}/supervisor/security/my-supervisees`, { headers: _ah(credentials) })
+  return res.data // string[]
 }
 
 export async function getPendingMineChecks(credentials) {
@@ -603,5 +690,44 @@ export async function removeSecuritySupervisorAssignment(credentials, officerUse
 
 export async function getSecurityOfficers(credentials) {
   const res = await axios.get(`${API_BASE}/supervisor/security/officers`, { headers: _ah(credentials) })
+  return res.data
+}
+
+// ─── Gatekeeper Supervisor ────────────────────────────────────────────────────
+
+export async function amIGatekeeperSupervisor(credentials) {
+  const res = await axios.get(`${API_BASE}/supervisor/gatekeeper/am-i-supervisor`, { headers: _ah(credentials) })
+  return res.data // { supervisor: true/false }
+}
+
+export async function getMyGatekeeperSupervisees(credentials) {
+  const res = await axios.get(`${API_BASE}/supervisor/gatekeeper/my-supervisees`, { headers: _ah(credentials) })
+  return res.data // string[]
+}
+
+export async function getSuperviseeVisits(credentials) {
+  const res = await axios.get(`${API_BASE}/visits/supervisees`, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function getGatekeeperSupervisorAssignments(credentials) {
+  const res = await axios.get(`${API_BASE}/supervisor/gatekeeper/assignments`, { headers: _ah(credentials) })
+  return res.data
+}
+
+export async function setGatekeeperSupervisorAssignment(credentials, porterUsername, supervisorUsername) {
+  await axios.put(`${API_BASE}/supervisor/gatekeeper/assignments`, { porterUsername, supervisorUsername }, {
+    headers: { ..._ah(credentials), 'Content-Type': 'application/json' },
+  })
+}
+
+export async function removeGatekeeperSupervisorAssignment(credentials, porterUsername) {
+  await axios.delete(`${API_BASE}/supervisor/gatekeeper/assignments/${encodeURIComponent(porterUsername)}`, {
+    headers: _ah(credentials),
+  })
+}
+
+export async function getGatekeeperOfficers(credentials) {
+  const res = await axios.get(`${API_BASE}/supervisor/gatekeeper/officers`, { headers: _ah(credentials) })
   return res.data
 }

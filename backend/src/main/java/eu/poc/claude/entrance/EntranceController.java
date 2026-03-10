@@ -21,13 +21,14 @@ public class EntranceController {
         this.identityService = identityService;
     }
 
-    // ── GET /api/entrances  (any authenticated user: list all entrances) ────────
+    // ── GET /api/entrances?locationId=X  (any authenticated user) ────────────
 
     @GetMapping
     public List<Entrance> findAll(
+            @RequestParam(required = false) Long locationId,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         requireUsername(authHeader);
-        return repo.findAll();
+        return locationId != null ? repo.findByLocation(locationId) : repo.findAll();
     }
 
     // ── GET /api/entrances/my  (gatekeeper: own assigned entrances) ───────────
@@ -39,6 +40,16 @@ public class EntranceController {
         return repo.findByGatekeeper(username);
     }
 
+    // ── GET /api/entrances/gatekeepers-in-other-locations?locationId=X ────────
+
+    @GetMapping("/gatekeepers-in-other-locations")
+    public List<String> gatekeepersInOtherLocations(
+            @RequestParam long locationId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        requireAdmin(authHeader);
+        return repo.findGatekeepersInOtherLocations(locationId);
+    }
+
     // ── POST /api/entrances ───────────────────────────────────────────────────
 
     @PostMapping
@@ -48,6 +59,8 @@ public class EntranceController {
         requireAdmin(authHeader);
         if (entrance.getName() == null || entrance.getName().isBlank())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name is required");
+        if (entrance.getLocationId() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "locationId is required");
         return ResponseEntity.status(HttpStatus.CREATED).body(repo.save(entrance));
     }
 
@@ -98,8 +111,17 @@ public class EntranceController {
             @RequestBody List<String> usernames,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         requireAdmin(authHeader);
-        repo.findById(id).orElseThrow(() ->
+        Entrance entrance = repo.findById(id).orElseThrow(() ->
             new ResponseStatusException(HttpStatus.NOT_FOUND, "Entrance " + id + " not found"));
+
+        // Validate: none of the new gatekeepers are already assigned to a different location
+        List<String> forbidden = repo.findGatekeepersInOtherLocations(entrance.getLocationId());
+        List<String> conflicts = usernames.stream().filter(forbidden::contains).toList();
+        if (!conflicts.isEmpty())
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The following gatekeepers are already assigned to a different location: " +
+                String.join(", ", conflicts));
+
         repo.setGatekeepers(id, usernames);
         return ResponseEntity.noContent().build();
     }

@@ -1,24 +1,62 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Typography, Alert, Button, Modal, Space, Tooltip, Tag,
-  Card, Spin, Collapse, Table, Badge,
+  Card, Spin, Collapse, Table, Badge, Tabs,
 } from 'antd'
 import {
   BankOutlined, ReloadOutlined, LoginOutlined, UserOutlined,
-  CalendarOutlined, CheckCircleOutlined, TrophyOutlined,
+  CalendarOutlined, CheckCircleOutlined, TeamOutlined,
+  PauseCircleOutlined, PlayCircleOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import Layout               from '../components/Layout'
 import Tx                   from '../components/Tx'
+import GreetingOverlay      from '../components/GreetingOverlay'
+import { usePageHelp }      from '../hooks/usePageHelp'
+
+const HELP_SECTIONS = [
+  {
+    title: 'Checking in a visitor',
+    items: [
+      'Find the visitor in the calendar below — expand the relevant month, then the week.',
+      'Click Check In on a PENDING visit to record the arrival immediately.',
+      'A warning appears if you check in on a different date than scheduled — confirm to proceed.',
+      'Each visit can only be checked in once. CHECKED_IN visits are shown in green.',
+    ],
+  },
+  {
+    title: 'Weekly calendar',
+    items: [
+      'Months expand to reveal weeks; the week closest to today is opened automatically.',
+      'Each week row shows the total visit count and how many are still pending.',
+      'My Entrances at the top lists the gates you are assigned to — visits are scoped to those entrances.',
+    ],
+  },
+  {
+    title: 'My Performance panel',
+    items: [
+      'Shows your check-in streak, count for today, on-time rate, and busiest hour of the day.',
+      'Collapsed by default — click the panel header to expand.',
+    ],
+  },
+  {
+    title: 'Supervised tab (supervisors only)',
+    items: [
+      'Appears if the admin has assigned you as a gatekeeper supervisor.',
+      'Shows visits across all your supervisees\' entrances so you can monitor their activity.',
+    ],
+  },
+]
 import OrgStatsPanel        from '../components/OrgStatsPanel'
-import GatekeeperStatsPanel from '../components/GatekeeperStatsPanel'
 import { useAuth }          from '../context/AuthContext'
+import { useTheme }         from '../context/ThemeContext'
 import { useTranslation }   from 'react-i18next'
 import { useOrgStats }      from '../hooks/useOrgStats'
-import { useGatekeeperStats } from '../hooks/useGatekeeperStats'
+import { useUserMap, formatUser } from '../hooks/useUserMap'
 import {
   checkInVisit, getMyEntrances,
   getMyVisitDateIndex, getMyVisitsForWeek,
+  getSuperviseeVisits, getMyGatekeeperSupervisees,
 } from '../api/operatonApi'
 
 const { Title, Text } = Typography
@@ -102,8 +140,20 @@ const VISIT_STATUS_COLOR = { PENDING: 'processing', CHECKED_IN: 'success', NO_SH
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function GatekeeperDashboard() {
-  const { auth } = useAuth()
-  const { t }    = useTranslation()
+  const { auth }   = useAuth()
+  const { dark }   = useTheme()
+  const { t }      = useTranslation()
+  const isSupervisor = auth?.isGatekeeperSupervisor ?? false
+  const userMap    = useUserMap(auth)
+  usePageHelp(HELP_SECTIONS)
+  // Cat 2: theme-aware secondary text that passes WCAG AA on both light and dark bg
+  const textSub = dark ? '#a0a0a0' : '#6b6b6b'
+
+  // Supervised visits (supervisor only)
+  const [superviseeVisits,        setSuperviseeVisits]        = useState([])
+  const [superviseeLoading,       setSuperviseeLoading]       = useState(false)
+  const [superviseeError,         setSuperviseeError]         = useState('')
+  const [mySupervisees,           setMySupervisees]           = useState([])
 
   // Lightweight week index (dates + counts, no visit details)
   const [weekIndex,    setWeekIndex]    = useState([])
@@ -132,10 +182,11 @@ export default function GatekeeperDashboard() {
   const [myEntrances,      setMyEntrances]      = useState([])
   const [entrancesLoading, setEntrancesLoading] = useState(true)
 
+  // Cat 4: pause live auto-refresh
+  const [paused, setPaused] = useState(false)
+
   // Stats
   const { stats: orgStats, loading: orgLoading, refresh: orgRefresh } = useOrgStats(auth)
-  const { stats: gkStats,  loading: gkLoading,  refresh: gkRefresh  } = useGatekeeperStats(auth)
-  const [statsOpen, setStatsOpen] = useState([])
 
   // ── Keep refs in sync ───────────────────────────────────────────────────────
   useEffect(() => { weekCacheRef.current = weekCache },    [weekCache])
@@ -200,14 +251,15 @@ export default function GatekeeperDashboard() {
     })
   }, [expandedWeeks]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-refresh every 60 s ─────────────────────────────────────────────────
+  // ── Auto-refresh every 60 s (Cat 4: respects paused state) ─────────────────
   useEffect(() => {
+    if (paused) return
     const id = setInterval(() => {
       loadIndex()
       expandedWeeksRef.current.forEach(wk => loadWeek(wk, true))
     }, 60_000)
     return () => clearInterval(id)
-  }, [loadIndex, loadWeek])
+  }, [loadIndex, loadWeek, paused])
 
   // ── Collapse handlers ───────────────────────────────────────────────────────
   const handleWeekChange = useCallback((month, openKeys) => {
@@ -224,6 +276,22 @@ export default function GatekeeperDashboard() {
     loadIndex()
     expandedWeeksRef.current.forEach(wk => loadWeek(wk, true))
   }, [loadIndex, loadWeek])
+
+  // ── Supervisee visits ────────────────────────────────────────────────────────
+  const loadSuperviseeVisits = useCallback(async () => {
+    setSuperviseeLoading(true); setSuperviseeError('')
+    try {
+      const [visits, supervisees] = await Promise.all([
+        getSuperviseeVisits(auth),
+        getMyGatekeeperSupervisees(auth),
+      ])
+      setSuperviseeVisits(visits)
+      setMySupervisees(supervisees)
+    } catch (e) { setSuperviseeError(e.response?.data?.message ?? e.message) }
+    finally { setSuperviseeLoading(false) }
+  }, [auth])
+
+  useEffect(() => { if (isSupervisor) loadSuperviseeVisits() }, [isSupervisor, loadSuperviseeVisits])
 
   // ── Check-in ────────────────────────────────────────────────────────────────
   const handleOpenDialog = (visit) => {
@@ -242,6 +310,7 @@ export default function GatekeeperDashboard() {
       const ws = isoWeekStart(activeVisit.visitDate)
       loadIndex()
       loadWeek(ws, true)
+      if (isSupervisor) loadSuperviseeVisits()
     } catch (e) {
       const msg = e.response?.status === 409
         ? 'This visit is already checked in.'
@@ -261,9 +330,9 @@ export default function GatekeeperDashboard() {
       width: 130,
       render: (d) => (
         <Space size={4}>
-          <Text style={{ fontSize: 12 }}>{dayjs(d).format('ddd, MMM D')}</Text>
+          <Text style={{ fontSize: 13 }}>{dayjs(d).format('ddd, MMM D')}</Text>
           {d === todayStr && (
-            <Tag color="blue" style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px', margin: 0 }}>
+            <Tag color="blue" style={{ fontSize: 11, padding: '0 4px', lineHeight: '16px', margin: 0 }}>
               Today
             </Tag>
           )}
@@ -279,7 +348,7 @@ export default function GatekeeperDashboard() {
             {v.visitorFirstName} {v.visitorLastName}
           </Text>
           {v.visitorCompany && (
-            <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>
+            <Text style={{ display: 'block', fontSize: 13, color: textSub }}>
               {v.visitorCompany}
               {v.visitorFunction ? ` · ${v.visitorFunction}` : ''}
             </Text>
@@ -297,9 +366,18 @@ export default function GatekeeperDashboard() {
       title: 'Invited by',
       dataIndex: 'inviterUsername',
       key: 'inviter',
-      width: 120,
+      width: 160,
       render: (u) => u
-        ? <Text type="secondary" style={{ fontSize: 12 }}>{u}</Text>
+        ? <Text style={{ fontSize: 13, color: textSub }}>{formatUser(u, userMap)}</Text>
+        : null,
+    },
+    {
+      title: 'Approved by',
+      dataIndex: 'securityApprover',
+      key: 'approver',
+      width: 160,
+      render: (u) => u
+        ? <Text style={{ fontSize: 13, color: textSub }}>{formatUser(u, userMap)}</Text>
         : null,
     },
     {
@@ -309,12 +387,12 @@ export default function GatekeeperDashboard() {
       render: (_, v) => (
         <div>
           <Tag color={VISIT_STATUS_COLOR[v.status] ?? 'default'} style={{ margin: 0 }}>
-            {v.status}
+            {v.status === 'PENDING' ? 'Awaiting Check-in' : v.status === 'CHECKED_IN' ? 'Checked In' : v.status}
           </Tag>
           {v.checkedInBy && (
-            <Text type="secondary" style={{ display: 'block', fontSize: 11, marginTop: 2 }}>
-              <CheckCircleOutlined style={{ marginRight: 3, color: '#52c41a' }} />
-              {v.checkedInBy}
+            <Text style={{ display: 'block', fontSize: 13, color: textSub, marginTop: 2 }}>
+              <CheckCircleOutlined aria-hidden="true" style={{ marginRight: 3, color: '#52c41a' }} />
+              {formatUser(v.checkedInBy, userMap)}
             </Text>
           )}
         </div>
@@ -339,9 +417,105 @@ export default function GatekeeperDashboard() {
   // ── Build grouped data for render ───────────────────────────────────────────
   const monthGroups = buildMonthGroups(weekIndex)
 
+  // ── Supervised tab columns (same as main + assigned-to column) ───────────────
+  const supervisedColumns = [
+    ...columns.slice(0, 2), // Date, Visitor
+    {
+      title: 'Entrance',
+      dataIndex: 'entranceName',
+      key: 'entrance',
+      width: 150,
+    },
+    {
+      title: 'Gatekeeper',
+      key: 'assignedTo',
+      width: 160,
+      render: (_, v) => v.checkedInBy
+        ? <Text type="secondary" style={{ fontSize: 12 }}><CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />{formatUser(v.checkedInBy, userMap)}</Text>
+        : <Text type="secondary" style={{ fontSize: 12 }}>—</Text>,
+    },
+    columns[columns.length - 2], // Status
+    columns[columns.length - 1], // Action
+  ]
+
+  // Group supervised visits by responsible gatekeeper (supervisee)
+  const visitsByGatekeeper = superviseeVisits.reduce((acc, v) => {
+    const key = v.responsibleGatekeeper ?? 'Unknown'
+    if (!acc[key]) acc[key] = []
+    acc[key].push(v)
+    return acc
+  }, {})
+
+  const supervisedTab = (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <Button icon={<ReloadOutlined />} onClick={loadSuperviseeVisits} loading={superviseeLoading}
+          aria-label="Reload supervised visits" />
+      </div>
+      {superviseeError && (
+        <Alert type="error" message={superviseeError} showIcon closable
+          onClose={() => setSuperviseeError('')} style={{ marginBottom: 16 }} />
+      )}
+      {superviseeLoading ? (
+        <div style={{ textAlign: 'center', padding: 48 }}><Spin /></div>
+      ) : mySupervisees.length === 0 ? (
+        <div style={{ padding: 48, textAlign: 'center', border: '2px dashed #e8e8e8', borderRadius: 12 }}>
+          <TeamOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
+          <div><Text type="secondary">No supervisees assigned.</Text></div>
+        </div>
+      ) : (
+        mySupervisees.map(gatekeeper => {
+          const visits = visitsByGatekeeper[gatekeeper] ?? []
+          const pending = visits.filter(v => v.status === 'PENDING').length
+          return (
+            <div key={gatekeeper} style={{ marginBottom: 24 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 12px', marginBottom: 8,
+                background: '#f5f0ff', borderRadius: 8, border: '1px solid #d3adf7',
+              }}>
+                <UserOutlined style={{ color: '#531dab' }} />
+                <Text strong style={{ color: '#531dab' }}>{formatUser(gatekeeper, userMap)}</Text>
+                <Tag color="purple" style={{ margin: 0 }}>{visits.length} visit{visits.length !== 1 ? 's' : ''}</Tag>
+                {pending > 0 && <Tag color="processing" style={{ margin: 0 }}>{pending} pending</Tag>}
+              </div>
+              {visits.length === 0 ? (
+                <div style={{ padding: '12px 16px', color: textSub, fontSize: 13, border: '1px dashed #e8e8e8', borderRadius: 8 }}>
+                  No visits yet.
+                </div>
+              ) : (
+                <Table
+                  size="small"
+                  dataSource={visits}
+                  columns={supervisedColumns}
+                  rowKey="id"
+                  pagination={false}
+                  style={{ borderRadius: 8, overflow: 'hidden' }}
+                  aria-label={`Visits for supervisee ${formatUser(gatekeeper, userMap)}`}
+                />
+              )}
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <Layout>
+      <GreetingOverlay />
+
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0 }}><Tx k="gatekeeper.title" /></Title>
+        {(auth?.firstName || auth?.lastName) && (
+          <Tag icon={<UserOutlined />} style={{ fontSize: 13, fontWeight: 600, borderRadius: 20 }}>
+            {[auth.firstName, auth.lastName].filter(Boolean).join(' ')}
+          </Tag>
+        )}
+      </div>
+
       <OrgStatsPanel
         stats={orgStats} loading={orgLoading} onRefresh={orgRefresh}
         isAdmin={auth?.isAlsoAdmin ?? auth?.role === 'ADMIN'}
@@ -367,27 +541,6 @@ export default function GatekeeperDashboard() {
         }
       </Card>
 
-      {/* My Stats — collapsed by default */}
-      <Collapse
-        activeKey={statsOpen}
-        onChange={setStatsOpen}
-        style={{ marginBottom: 20, borderColor: '#d9d9d9' }}
-      >
-        <Collapse.Panel
-          key="stats"
-          header={
-            <Space>
-              <TrophyOutlined style={{ color: '#531dab' }} />
-              <Text strong>My Performance</Text>
-              {gkStats && gkStats.todayCheckins > 0 && (
-                <Tag color="purple" style={{ margin: 0 }}>{gkStats.todayCheckins} today</Tag>
-              )}
-            </Space>
-          }
-        >
-          <GatekeeperStatsPanel stats={gkStats} loading={gkLoading} />
-        </Collapse.Panel>
-      </Collapse>
 
       {error && (
         <Alert
@@ -396,98 +549,134 @@ export default function GatekeeperDashboard() {
         />
       )}
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-        <div>
-          <Title level={4} style={{ margin: 0 }}><Tx k="gatekeeper.title" /></Title>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            {lastRefresh
-              ? t('common.liveUpdated', { time: lastRefresh.toLocaleTimeString() })
-              : t('common.connecting')}
-          </Text>
-        </div>
-        <Tooltip title={t('common.refreshNow')}>
-          <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={indexLoading} />
-        </Tooltip>
-      </div>
-
-      {/* Visit accordion */}
-      {indexLoading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}><Spin /></div>
-      ) : monthGroups.length === 0 ? (
-        <div style={{ padding: 48, textAlign: 'center', border: '2px dashed #e8e8e8', borderRadius: 12 }}>
-          <CalendarOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
-          <div><Text type="secondary"><Tx k="gatekeeper.emptyState" /></Text></div>
-        </div>
-      ) : (
-        <Collapse
-          activeKey={expandedMonths}
-          onChange={setExpandedMonths}
-          style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8 }}
-        >
-          {monthGroups.map(month => (
-            <Collapse.Panel
-              key={month.key}
-              header={
+      <Tabs items={[
+        {
+          key: 'my',
+          label: <Space><CalendarOutlined /><Tx k="gatekeeper.title" /></Space>,
+          children: (
+            <>
+              {/* Header — Cat 4: pause / resume live updates */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  {paused
+                    ? 'Live updates paused'
+                    : lastRefresh
+                    ? t('common.liveUpdated', { time: lastRefresh.toLocaleTimeString() })
+                    : t('common.connecting')}
+                </Text>
                 <Space>
-                  <Text strong style={{ fontSize: 14 }}>{month.label}</Text>
-                  <Tag>{month.total} visit{month.total !== 1 ? 's' : ''}</Tag>
-                  {month.pending > 0 && (
-                    <Tag color="processing">{month.pending} pending</Tag>
-                  )}
+                  <Tooltip title={paused ? 'Resume live updates (60 s)' : 'Pause live updates'}>
+                    <Button
+                      icon={paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
+                      onClick={() => setPaused(p => !p)}
+                      aria-pressed={paused}
+                      aria-label={paused ? 'Resume live updates' : 'Pause live updates'}
+                    />
+                  </Tooltip>
+                  <Tooltip title={t('common.refreshNow')}>
+                    <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={indexLoading}
+                      aria-label={t('common.refreshNow')} />
+                  </Tooltip>
                 </Space>
-              }
-            >
-              <Collapse
-                activeKey={expandedWeeks.filter(w => month.weeks.some(mw => mw.weekStart === w))}
-                onChange={(openKeys) => handleWeekChange(month, openKeys)}
-                style={{ background: '#fafafa', borderRadius: 6 }}
-              >
-                {month.weeks.map(week => {
-                  const isCurrentWeek = week.weekStart === isoWeekStart(todayStr)
-                  const isLoading = weekLoadingMap[week.weekStart]
-                  const data = weekCache[week.weekStart]
+              </div>
 
-                  return (
+              {/* Visit accordion */}
+              {indexLoading ? (
+                <div style={{ textAlign: 'center', padding: 48 }}><Spin /></div>
+              ) : monthGroups.length === 0 ? (
+                <div style={{ padding: 48, textAlign: 'center', border: '2px dashed #e8e8e8', borderRadius: 12 }}>
+                  <CalendarOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
+                  <div><Text type="secondary"><Tx k="gatekeeper.emptyState" /></Text></div>
+                </div>
+              ) : (
+                <Collapse
+                  activeKey={expandedMonths}
+                  onChange={setExpandedMonths}
+                  style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8 }}
+                >
+                  {monthGroups.map(month => (
                     <Collapse.Panel
-                      key={week.weekStart}
+                      key={month.key}
                       header={
                         <Space>
-                          <CalendarOutlined
-                            style={{ color: isCurrentWeek ? '#1677ff' : '#8c8c8c' }}
-                          />
-                          <Text style={{ fontWeight: isCurrentWeek ? 600 : 400 }}>
-                            {weekRangeLabel(week.weekStart)}
-                            {isCurrentWeek ? ' · This week' : ''}
-                          </Text>
-                          <Tag style={{ marginLeft: 4 }}>{week.total}</Tag>
-                          {week.pending > 0 && (
-                            <Tag color="processing">{week.pending} pending</Tag>
+                          <Text strong style={{ fontSize: 14 }}>{month.label}</Text>
+                          <Tag>{month.total} visit{month.total !== 1 ? 's' : ''}</Tag>
+                          {month.pending > 0 && (
+                            <Tag color="processing">{month.pending} pending</Tag>
                           )}
                         </Space>
                       }
                     >
-                      {isLoading || data === undefined ? (
-                        <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
-                      ) : (
-                        <Table
-                          size="small"
-                          dataSource={data}
-                          columns={columns}
-                          rowKey="id"
-                          pagination={false}
-                          locale={{ emptyText: 'No visits for this week.' }}
-                          style={{ background: '#fff', borderRadius: 6, overflow: 'hidden' }}
-                        />
-                      )}
+                      <Collapse
+                        activeKey={expandedWeeks.filter(w => month.weeks.some(mw => mw.weekStart === w))}
+                        onChange={(openKeys) => handleWeekChange(month, openKeys)}
+                        style={{ background: '#fafafa', borderRadius: 6 }}
+                      >
+                        {month.weeks.map(week => {
+                          const isCurrentWeek = week.weekStart === isoWeekStart(todayStr)
+                          const isLoading = weekLoadingMap[week.weekStart]
+                          const data = weekCache[week.weekStart]
+
+                          return (
+                            <Collapse.Panel
+                              key={week.weekStart}
+                              header={
+                                <Space>
+                                  <CalendarOutlined
+                                    style={{ color: isCurrentWeek ? '#1677ff' : textSub }}
+                                  />
+                                  <Text style={{ fontWeight: isCurrentWeek ? 600 : 400 }}>
+                                    {weekRangeLabel(week.weekStart)}
+                                    {isCurrentWeek ? ' · This week' : ''}
+                                  </Text>
+                                  <Tag style={{ marginLeft: 4 }}>{week.total}</Tag>
+                                  {week.pending > 0 && (
+                                    <Tag color="processing">{week.pending} pending</Tag>
+                                  )}
+                                </Space>
+                              }
+                            >
+                              {isLoading || data === undefined ? (
+                                <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                              ) : (
+                                <Table
+                                  size="small"
+                                  dataSource={data}
+                                  columns={columns}
+                                  rowKey="id"
+                                  pagination={false}
+                                  locale={{ emptyText: 'No visits for this week.' }}
+                                  style={{ background: '#fff', borderRadius: 6, overflow: 'hidden' }}
+                                  aria-label={`Visits for week of ${weekRangeLabel(week.weekStart)}`}
+                                />
+                              )}
+                            </Collapse.Panel>
+                          )
+                        })}
+                      </Collapse>
                     </Collapse.Panel>
-                  )
-                })}
-              </Collapse>
-            </Collapse.Panel>
-          ))}
-        </Collapse>
-      )}
+                  ))}
+                </Collapse>
+              )}
+            </>
+          ),
+        },
+        ...(isSupervisor ? [{
+          key: 'supervised',
+          label: (
+            <Space>
+              <TeamOutlined />
+              Supervised
+              {superviseeVisits.filter(v => v.status === 'PENDING').length > 0 && (
+                <Tag color="processing" style={{ marginLeft: 4 }}>
+                  {superviseeVisits.filter(v => v.status === 'PENDING').length}
+                </Tag>
+              )}
+            </Space>
+          ),
+          children: supervisedTab,
+        }] : []),
+      ]} />
 
       {/* Check-in modal */}
       <Modal
@@ -507,21 +696,21 @@ export default function GatekeeperDashboard() {
             <Space direction="vertical" size={6} style={{ width: '100%', marginBottom: 20 }}>
               {activeVisit.visitorCompany && (
                 <Space>
-                  <BankOutlined style={{ color: '#8c8c8c' }} />
+                  <BankOutlined style={{ color: textSub }} />
                   <Text>{activeVisit.visitorCompany}</Text>
                 </Space>
               )}
               <Space>
-                <CalendarOutlined style={{ color: '#8c8c8c' }} />
+                <CalendarOutlined style={{ color: textSub }} />
                 <Text strong>{activeVisit.visitDate}</Text>
               </Space>
               <Space>
-                <LoginOutlined style={{ color: '#8c8c8c' }} />
+                <LoginOutlined style={{ color: textSub }} />
                 <Text>{activeVisit.entranceName}</Text>
               </Space>
               {activeVisit.inviterUsername && (
                 <Space>
-                  <UserOutlined style={{ color: '#8c8c8c' }} />
+                  <UserOutlined style={{ color: textSub }} />
                   <Text type="secondary">Invited by {activeVisit.inviterUsername}</Text>
                 </Space>
               )}

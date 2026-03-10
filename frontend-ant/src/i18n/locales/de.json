@@ -23,7 +23,12 @@
     "admin": "Administration",
     "dashboard": "Dashboard",
     "signOut": "Abmelden",
-    "language": "Sprache"
+    "language": "Sprache",
+    "locations": "Standorte",
+    "entrances": "Eingänge",
+    "supervisorAdmin": "Supervisor-Zuweisungen",
+    "myPerformance": "Meine Leistung",
+    "whyUs": "Warum wir — Unsere Vision"
   },
   "roles": {
     "INVITER": "Einladender",
@@ -37,7 +42,11 @@
     "securityReview": "Sicherheitsprüfung",
     "gateEntry": "Einlasskontrolle",
     "administration": "Administration",
-    "visitorManagement": "Besucherverwaltung"
+    "visitorManagement": "Besucherverwaltung",
+    "locations": "Standorte",
+    "entrances": "Eingänge",
+    "supervisorAdmin": "Supervisor-Zuweisungen",
+    "myPerformance": "Meine Leistung"
   },
   "login": {
     "title": "Besucherverwaltung",
@@ -279,5 +288,71 @@
     "de": "Deutsch",
     "zh": "中文",
     "ru": "Русский"
+  },
+  "session": {
+    "timeLeft": "Verbleibende Sitzungszeit:"
+  },
+  "roleAdoption": {
+    "subtitle": "Was jetzt möglich ist, was vorher nicht ging:",
+    "inviter": {
+      "link": "VisMan für Einladende",
+      "title": "VisMan für Einladende",
+      "i1": "Mehrere Besucher auf einmal einladen — ein Formular, keine E-Mail-Ketten, keine Anrufe",
+      "i2": "Jede Einladung in Echtzeit verfolgen — von der Einreichung bis zur Einlasskontrolle",
+      "i3": "Sicherheitsfragen sofort beantworten — von überall, auf jedem Gerät",
+      "i4": "Der vollständige Einladungsverlauf — durchsuchbar, Monat für Monat — immer griffbereit",
+      "i5": "Wenn Sie nicht erreichbar sind, übernimmt Ihr Vorgesetzter direkt — nichts bleibt stecken",
+      "mobile": "VisMan läuft im Browser auf jedem Gerät. Keine Installation, kein IT-Ticket, kein Warten."
+    },
+    "security": {
+      "link": "VisMan für Sicherheit",
+      "title": "VisMan für Sicherheit",
+      "i1": "Besucheranfragen per Smartphone prüfen und entscheiden — die mobile App funktioniert überall",
+      "i2": "Jeder Besucher wird mit einem Zuverlässigkeitswert auf Basis echter historischer Daten angezeigt",
+      "i3": "Rückfragen direkt im System an den Einladenden stellen — protokolliert, keine E-Mail nötig",
+      "i4": "Ablehnen oder auf die Blacklist setzen mit einem Klick — gilt automatisch für alle zukünftigen Besuche",
+      "i5": "Jede Entscheidung wird mit Zeitstempel protokolliert — kein manuelles Register, keine Übergabenotizen",
+      "mobile": "VisMan Security App auf jedem Smartphone installieren. Aufgaben vor Ort erledigen, ohne VPN."
+    },
+    "gatekeeper": {
+      "link": "VisMan für Pförtner",
+      "title": "VisMan für Pförtner",
+      "i1": "Alle erwarteten Besucher vor ihrer Ankunft sehen — keine Überraschungen, keine Papierlisten",
+      "i2": "Besucher vom Telefon aus einchecken, auch ohne Internet — die App funktioniert vollständig offline",
+      "i3": "GPS-gestempelte Check-ins erfassen genau wo und wann — automatisch, kein Papierkram",
+      "i4": "Wochenplan tageweise geordnet, live aktualisiert, immer auf dem Bildschirm",
+      "i5": "Ihre Leistung — Serien, Pünktlichkeitsrate, Ranking — automatisch erfasst und angezeigt",
+      "mobile": "VisMan Pförtner-App auf dem Handy wie eine native App installieren. Kein Firmennotebook am Eingang nötig."
+    }
+  },
+  "whyUs": {
+    "heroSuper": "Besuchermanagement — neu gedacht",
+    "heroTitle": "Warum wir — Unsere Vision",
+    "heroText": "Die Zukunft sicherer, menschenorientierter Zugangskontrolle ist kein Anmeldebuch. Es ist ein lebendiger Workflow — einer, der Ihre Mitarbeiter respektiert, Ihre Räumlichkeiten schützt und jedes Teammitglied mit dem richtigen Werkzeug ausstattet.",
+    "problemTitle": "Das Problem, über das niemand spricht",
+    "problemText": "Jeden Tag verbringen Tausende von Mitarbeitern Minuten — manchmal Stunden — damit, Besuchergenehmigungen per E-Mail, Telefon und gemeinsam genutzten Tabellen zu verfolgen. Sicherheitsbeauftragte treffen Entscheidungen ohne Kontext. Pförtner weisen Personen ab oder winken sie durch, die sie nicht überprüfen können. Compliance-Teams geraten in Panik, wenn ein Prüfer fragt, wer letzten Dienstag im Gebäude war. Die Kosten sind nicht nur Reibung — es ist Risiko.",
+    "solutionTitle": "Unsere Antwort",
+    "solutionText1": "Wir haben ein System entwickelt, in dem jede Rolle genau die Schnittstelle hat, die sie braucht, verbunden durch einen transparenten, prüfbaren BPMN-Workflow. Der Einladende füllt ein Formular aus. Die Sicherheit erhält den vollen Kontext, die Historie und eine Zuverlässigkeitsbewertung. Der Pförtner sieht die heutigen erwarteten Ankünfte auf einem übersichtlichen Mobilbildschirm. Der Admin sieht alles, in Echtzeit, über jeden Standort.",
+    "solutionText2": "Keine E-Mails. Keine Tabellen. Kein Rätselraten. Nur ein ruhiger, strukturierter Prozess — entwickelt, um den Arbeitsalltag Ihres Teams zu verbessern.",
+    "diffTitle": "Was uns auszeichnet",
+    "f1title": "Keine Anbieterbindung",
+    "f1desc": "Open-Source Operaton BPM-Engine. Ihre Daten bleiben immer auf Ihrer Infrastruktur.",
+    "f2title": "Visuelle, anpassbare Workflows",
+    "f2desc": "BPMN-Prozesse, die Ihr Team lesen, ändern und weiterentwickeln kann — ohne Code.",
+    "f3title": "Rollenorientiertes Design",
+    "f3desc": "Drei zweckgebaute Apps — Desktop, Mobile PWA, Pförtner-PWA — jede für eine Aufgabe entwickelt.",
+    "f4title": "Eingebaute Compliance",
+    "f4desc": "Jede Aktion mit Zeitstempel und gespeichert. Vollständiger Prüfpfad, jederzeit bereit, null Aufwand.",
+    "f5title": "Global von Anfang an",
+    "f5desc": "Sechs Sprachen integriert. Multi-Standort-Unterstützung mit unabhängigen Eingangslisten und Supervisor-Hierarchien.",
+    "f6title": "Funktioniert überall",
+    "f6desc": "Die Offline-Pförtner-App synchronisiert GPS-gestempelte Check-ins, sobald die Verbindung wiederhergestellt ist.",
+    "statsLocations": "Globale Standorte",
+    "statsRoles": "Koordinierte Rollen",
+    "statsCheckins": "Jährliche Check-ins",
+    "statsAudit": "Audit-Abdeckung",
+    "ctaTitle": "Der nächste Schritt",
+    "ctaText": "Dieses System ist kein Prototyp — es ist ein vollständig laufender Proof of Concept mit sechs globalen Büros, 214 Nutzern und einem Jahr simulierter Aktivität. Jede Funktion, die Sie sehen, ist live, testbar und bereit, an Ihren realen Anforderungen gemessen zu werden.",
+    "ctaQuote": "„Wir haben nicht versucht, ein Besucherformular zu bauen. Wir haben versucht, jedem, der durch Ihre Türen geht — und jedem, der ihn eingeladen hat — ein unvergessliches Erlebnis zu bieten.\u201C"
   }
 }

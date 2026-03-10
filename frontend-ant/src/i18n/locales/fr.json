@@ -23,7 +23,12 @@
     "admin": "Administration",
     "dashboard": "Tableau de bord",
     "signOut": "Se déconnecter",
-    "language": "Langue"
+    "language": "Langue",
+    "locations": "Sites",
+    "entrances": "Entrées",
+    "supervisorAdmin": "Attributions des superviseurs",
+    "myPerformance": "Mes Performances",
+    "whyUs": "Pourquoi nous — Notre Vision"
   },
   "roles": {
     "INVITER": "Invitant",
@@ -37,7 +42,11 @@
     "securityReview": "Contrôle sécurité",
     "gateEntry": "Contrôle d'accès",
     "administration": "Administration",
-    "visitorManagement": "Gestion des visiteurs"
+    "visitorManagement": "Gestion des visiteurs",
+    "locations": "Sites",
+    "entrances": "Entrées",
+    "supervisorAdmin": "Attributions des superviseurs",
+    "myPerformance": "Mes Performances"
   },
   "login": {
     "title": "Gestion des visiteurs",
@@ -279,5 +288,71 @@
     "de": "Deutsch",
     "zh": "中文",
     "ru": "Русский"
+  },
+  "session": {
+    "timeLeft": "Temps avant déconnexion :"
+  },
+  "roleAdoption": {
+    "subtitle": "Ce qui est désormais possible et ne l'était pas avant :",
+    "inviter": {
+      "link": "VisMan pour les Invitants",
+      "title": "VisMan pour les Invitants",
+      "i1": "Inviter plusieurs visiteurs à la fois — un formulaire, sans échanges d'e-mails ni appels téléphoniques",
+      "i2": "Suivre chaque invitation en temps réel, de la soumission jusqu'au contrôle d'accès",
+      "i3": "Répondre instantanément aux questions de sécurité, de n'importe où, sur n'importe quel appareil",
+      "i4": "Votre historique complet d'invitations — consultable mois par mois — toujours à portée de main",
+      "i5": "Si vous êtes indisponible, votre superviseur intervient directement — rien ne reste bloqué",
+      "mobile": "VisMan fonctionne dans votre navigateur sur n'importe quel appareil. Pas d'installation, pas de ticket IT."
+    },
+    "security": {
+      "link": "VisMan pour la Sécurité",
+      "title": "VisMan pour la Sécurité",
+      "i1": "Examiner et décider les demandes de visiteurs depuis votre smartphone — l'app mobile fonctionne partout",
+      "i2": "Chaque visiteur est accompagné d'un score de fiabilité basé sur des données historiques réelles",
+      "i3": "Poser une question de clarification à l'invitant dans le système — tracé, journalisé, sans e-mail",
+      "i4": "Refuser ou mettre sur liste noire en un clic — le blocage s'applique automatiquement à toutes les visites futures",
+      "i5": "Chaque décision est enregistrée avec horodatage — pas de registre manuel, pas de notes de passation",
+      "mobile": "Installez l'app VisMan Sécurité sur n'importe quel smartphone. Traitez les tâches sur le terrain, sans VPN."
+    },
+    "gatekeeper": {
+      "link": "VisMan pour les Gardiens",
+      "title": "VisMan pour les Gardiens",
+      "i1": "Voir tous les visiteurs attendus avant leur arrivée — aucune surprise, aucune liste papier",
+      "i2": "Enregistrer les visiteurs depuis votre téléphone, même sans internet — l'app fonctionne entièrement hors ligne",
+      "i3": "Les check-ins horodatés GPS enregistrent exactement où et quand — automatique, zéro paperasse",
+      "i4": "Votre planning hebdomadaire organisé par jour, mis à jour en direct, toujours visible",
+      "i5": "Vos performances — séries, taux de ponctualité, classement — suivies et affichées automatiquement",
+      "mobile": "Installez l'app VisMan Gardien sur votre téléphone comme une app native. Aucun ordinateur de bureau requis à l'entrée."
+    }
+  },
+  "whyUs": {
+    "heroSuper": "Gestion des visiteurs — réinventée",
+    "heroTitle": "Pourquoi nous — Notre Vision",
+    "heroText": "L'avenir d'un contrôle d'accès sécurisé et centré sur l'humain n'est pas un registre de signatures. C'est un flux de travail vivant — l'un qui respecte vos collaborateurs, protège vos locaux et donne à chaque membre de l'équipe le bon outil pour son rôle.",
+    "problemTitle": "Le problème dont personne ne parle",
+    "problemText": "Chaque jour, des milliers d'employés passent des minutes — parfois des heures — à chercher des approbations pour des visiteurs par e-mail, téléphone et feuilles de calcul partagées. Les agents de sécurité prennent des décisions sans contexte. Les gardiens refusent ou laissent passer des personnes qu'ils ne peuvent pas vérifier. Les équipes de conformité s'affolent quand un auditeur demande qui était dans le bâtiment mardi dernier. Le coût n'est pas seulement de la friction — c'est un risque.",
+    "solutionTitle": "Notre réponse",
+    "solutionText1": "Nous avons construit un système où chaque rôle dispose exactement de l'interface dont il a besoin, connecté par un flux de travail BPMN transparent et auditable. L'invitant remplit un seul formulaire. La sécurité dispose du contexte complet, de l'historique et d'un score de fiabilité. Le gardien voit les arrivées prévues du jour sur un écran mobile clair. L'administrateur voit tout, en temps réel, sur chaque site.",
+    "solutionText2": "Pas d'e-mails. Pas de tableurs. Pas de devinettes. Juste un processus calme et structuré — conçu pour améliorer la vie professionnelle de votre équipe.",
+    "diffTitle": "Ce qui nous distingue",
+    "f1title": "Zéro dépendance fournisseur",
+    "f1desc": "Moteur BPM Operaton open-source. Vos données restent sur votre infrastructure, toujours.",
+    "f2title": "Workflows visuels et adaptables",
+    "f2desc": "Des processus BPMN que votre équipe peut lire, modifier et faire évoluer — sans code.",
+    "f3title": "Design centré sur les rôles",
+    "f3desc": "Trois applications dédiées — bureau, PWA mobile, PWA gardien — chacune conçue pour une mission.",
+    "f4title": "Conformité intégrée",
+    "f4desc": "Chaque action horodatée et stockée. Piste d'audit complète, toujours disponible, zéro effort supplémentaire.",
+    "f5title": "Global par défaut",
+    "f5desc": "Six langues intégrées. Support multi-sites avec des effectifs d'entrée et des hiérarchies de superviseurs indépendants.",
+    "f6title": "Fonctionne partout",
+    "f6desc": "L'application gardien hors ligne synchronise les check-ins estampillés GPS dès que la connexion est rétablie.",
+    "statsLocations": "Sites mondiaux",
+    "statsRoles": "Rôles coordonnés",
+    "statsCheckins": "Check-ins annuels",
+    "statsAudit": "Couverture d'audit",
+    "ctaTitle": "La prochaine étape",
+    "ctaText": "Ce système n'est pas un prototype — c'est une preuve de concept entièrement fonctionnelle avec six bureaux mondiaux, 214 utilisateurs et une année d'activité simulée. Chaque fonctionnalité que vous voyez est en direct, testable et prête à être évaluée selon vos besoins réels.",
+    "ctaQuote": "« Nous ne cherchions pas à créer un formulaire visiteur. Nous cherchions à offrir à chaque personne qui franchit vos portes — et à chaque personne qui l'a invitée — une expérience mémorable. »"
   }
 }

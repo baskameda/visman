@@ -138,12 +138,28 @@ public class InvitationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(inv);
     }
 
+    // ── GET /api/invitations/my/months ────────────────────────────────────────
+
+    @GetMapping("/my/months")
+    public List<InvitationRepository.MonthSummary> myMonths(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        return invitationRepo.findMonthsByInviter(requireUsername(authHeader));
+    }
+
     // ── GET /api/invitations/my ───────────────────────────────────────────────
+    // Without year/month params → returns current calendar month only.
 
     @GetMapping("/my")
     public List<Invitation> myInvitations(
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        return invitationRepo.findByInviter(requireUsername(authHeader));
+        String username = requireUsername(authHeader);
+        if (year != null && month != null) {
+            return invitationRepo.findByInviterAndMonth(username, year, month);
+        }
+        LocalDate now = LocalDate.now();
+        return invitationRepo.findByInviterAndMonth(username, now.getYear(), now.getMonthValue());
     }
 
     // ── GET /api/invitations/{id} ─────────────────────────────────────────────
@@ -167,6 +183,10 @@ public class InvitationController {
             d.setSecurityCheckId(     sc.getId());
             d.setSecurityCheckStatus( sc.getStatus());
             d.setReliability(         sc.getReliability());
+            d.setAssignedTo(          sc.getAssignedTo());
+            d.setSecurityReviewer(    sc.getSecurityReviewer());
+            d.setClarificationCount(  sc.getClarificationCount());
+            d.setClarificationQuestion(sc.getClarificationQuestion());
             d.setVisits(visitRepo.findBySecurityCheck(sc.getId()).stream().map(v -> {
                 Invitation.VisitSummary s = new Invitation.VisitSummary();
                 s.setId(v.getId()); s.setVisitDate(v.getVisitDate().toString()); s.setStatus(v.getStatus());

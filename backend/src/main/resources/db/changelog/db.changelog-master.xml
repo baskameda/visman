@@ -15,5 +15,15 @@
     <include file="changes/008-visit-table.xml"         relativeToChangelogFile="true"/>
     <include file="changes/009-supervisor-assignment.xml"  relativeToChangelogFile="true"/>
     <include file="changes/010-security-assignment.xml"   relativeToChangelogFile="true"/>
+    <include file="changes/011-gatekeeper-supervisor-assignment.xml" relativeToChangelogFile="true"/>
+    <include file="changes/012-location-table.xml"                  relativeToChangelogFile="true"/>
+    <include file="changes/013-seed-commanders-desk.xml"            relativeToChangelogFile="true"/>
+    <include file="changes/014-seed-invitation-history.xml"         relativeToChangelogFile="true"/>
+    <include file="changes/015-seed-supervisor-assignments.xml"     relativeToChangelogFile="true"/>
+    <include file="changes/016-location-expansion.xml"             relativeToChangelogFile="true"/>
+    <include file="changes/017-location-users.xml"                 relativeToChangelogFile="true"/>
+    <include file="changes/018-location-history.xml"               relativeToChangelogFile="true"/>
+    <include file="changes/019-location-supervisors.xml"           relativeToChangelogFile="true"/>
+    <include file="changes/020-visit-coordinates.xml"             relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

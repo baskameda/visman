@@ -8,6 +8,35 @@ import {
 import Layout          from '../components/Layout'
 import Tx              from '../components/Tx'
 import { useAuth }     from '../context/AuthContext'
+import { usePageHelp } from '../hooks/usePageHelp'
+
+const HELP_SECTIONS = [
+  {
+    title: 'Browsing your history',
+    items: [
+      'Invitations are grouped by month, newest first. The current month is always at the top.',
+      'Past month panels are collapsed — click any month header to load and expand it.',
+      'The count badge on each month header shows how many invitations were created that month.',
+    ],
+  },
+  {
+    title: 'Invitation detail',
+    items: [
+      'Click any invitation row to open the full detail view.',
+      'The detail shows all visitors, their security check outcomes (Approved / Refused / Blacklisted), and check-in records for approved visits.',
+      'The process flow diagram shows where in the workflow each visitor currently stands.',
+    ],
+  },
+  {
+    title: 'Status guide',
+    items: [
+      'Pending — awaiting security review. No action needed from you.',
+      'In Review — security has asked you a question. Go to My Tasks to answer it.',
+      'Approved — security cleared the visitor; a visit record has been created for each day in the date range.',
+      'Refused — access was denied. The process is closed.',
+    ],
+  },
+]
 import { useTranslation } from 'react-i18next'
 import { getMyInvitations, getInvitation } from '../api/operatonApi'
 
@@ -183,6 +212,7 @@ function DayGroup({ day, invs, openId, onToggle, onDrill }) {
 export default function InvitationHistoryPage() {
   const { auth } = useAuth()
   const { t }    = useTranslation()
+  usePageHelp(HELP_SECTIONS)
 
   const [invitations,  setInvitations]  = useState([])
   const [loading,      setLoading]      = useState(true)

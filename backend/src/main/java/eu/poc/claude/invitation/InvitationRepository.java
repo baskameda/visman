@@ -56,9 +56,23 @@ public class InvitationRepository {
 
     // ── Read ───────────────────────────────────────────────────────────────────
 
-    /** Summary list for the inviter's own dashboard — status computed from security checks. */
-    public List<Invitation> findByInviter(String username) {
+    // ── Month summary ──────────────────────────────────────────────────────────
+
+    public record MonthSummary(int year, int month, int count) {}
+
+    /** Returns distinct year/month pairs for which the inviter has invitations, newest first. */
+    public List<MonthSummary> findMonthsByInviter(String username) {
         return jdbc.query(
+            "SELECT YEAR(i.start_date) AS yr, MONTH(i.start_date) AS mo, COUNT(*) AS cnt " +
+            "FROM poc_invitation i " +
+            "WHERE i.inviter_username = ? " +
+            "GROUP BY YEAR(i.start_date), MONTH(i.start_date) " +
+            "ORDER BY yr DESC, mo DESC",
+            (rs, rn) -> new MonthSummary(rs.getInt("yr"), rs.getInt("mo"), rs.getInt("cnt")),
+            username);
+    }
+
+    private static final String INV_SELECT =
             "SELECT i.id, i.inviter_username, i.start_date, i.end_date, " +
             "       i.company, i.description, i.process_instance_id, i.created_at, " +
             "       e.entrance_name, i.entrance_id, " +
@@ -71,26 +85,41 @@ public class InvitationRepository {
             "       END AS status " +
             "FROM poc_invitation i " +
             "JOIN poc_entrance e ON e.id = i.entrance_id " +
-            "LEFT JOIN poc_security_check sc ON sc.invitation_id = i.id " +
-            "WHERE i.inviter_username = ? " +
+            "LEFT JOIN poc_security_check sc ON sc.invitation_id = i.id ";
+
+    private static final String INV_GROUP =
             "GROUP BY i.id, i.inviter_username, i.start_date, i.end_date, " +
             "         i.company, i.description, i.process_instance_id, i.created_at, " +
             "         e.entrance_name, i.entrance_id " +
-            "ORDER BY i.created_at DESC",
-            (rs, rn) -> {
-                Invitation inv = new Invitation();
-                inv.setId(              rs.getLong("id"));
-                inv.setInviterUsername( rs.getString("inviter_username"));
-                inv.setStartDate(       rs.getDate("start_date").toLocalDate());
-                inv.setEndDate(         rs.getDate("end_date").toLocalDate());
-                inv.setEntranceId(      rs.getLong("entrance_id"));
-                inv.setEntranceName(    rs.getString("entrance_name"));
-                inv.setCompany(         rs.getString("company"));
-                inv.setDescription(     rs.getString("description"));
-                inv.setProcessInstanceId(rs.getString("process_instance_id"));
-                inv.setStatus(          rs.getString("status"));
-                return inv;
-            }, username);
+            "ORDER BY i.created_at DESC";
+
+    private static final org.springframework.jdbc.core.RowMapper<Invitation> INV_ROW = (rs, rn) -> {
+        Invitation inv = new Invitation();
+        inv.setId(               rs.getLong("id"));
+        inv.setInviterUsername(  rs.getString("inviter_username"));
+        inv.setStartDate(        rs.getDate("start_date").toLocalDate());
+        inv.setEndDate(          rs.getDate("end_date").toLocalDate());
+        inv.setEntranceId(       rs.getLong("entrance_id"));
+        inv.setEntranceName(     rs.getString("entrance_name"));
+        inv.setCompany(          rs.getString("company"));
+        inv.setDescription(      rs.getString("description"));
+        inv.setProcessInstanceId(rs.getString("process_instance_id"));
+        inv.setStatus(           rs.getString("status"));
+        return inv;
+    };
+
+    /** Summary list for the inviter's own dashboard — status computed from security checks. */
+    public List<Invitation> findByInviter(String username) {
+        return jdbc.query(INV_SELECT + "WHERE i.inviter_username = ? " + INV_GROUP, INV_ROW, username);
+    }
+
+    /** Invitations for a specific year/month (used for lazy loading). */
+    public List<Invitation> findByInviterAndMonth(String username, int year, int month) {
+        return jdbc.query(
+            INV_SELECT +
+            "WHERE i.inviter_username = ? AND YEAR(i.start_date) = ? AND MONTH(i.start_date) = ? " +
+            INV_GROUP,
+            INV_ROW, username, year, month);
     }
 
     /** Full detail with visitor list (no visits — those are loaded separately). */

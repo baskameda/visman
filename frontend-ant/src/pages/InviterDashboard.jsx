@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   Button, Row, Col, Typography, Alert, Space,
   Modal, Form, Input, DatePicker, Tooltip, Divider,
-  List, Avatar, Tag, Spin, Select, Tabs, Badge, Card, Radio,
+  List, Avatar, Tag, Spin, Select, Tabs, Badge, Card, Radio, Collapse,
 } from 'antd'
 import {
   PlusCircleOutlined, UserAddOutlined, ReloadOutlined,
@@ -14,15 +14,61 @@ import {
 import dayjs from 'dayjs'
 import Layout          from '../components/Layout'
 import Tx              from '../components/Tx'
+import GreetingOverlay from '../components/GreetingOverlay'
+import { usePageHelp } from '../hooks/usePageHelp'
+import { useUserMap, formatUser, getCheckProcessStatus } from '../hooks/useUserMap'
+
+const HELP_SECTIONS = [
+  {
+    title: 'Creating an invitation',
+    items: [
+      'Click New Invitation. Choose the entrance, the date range, and optionally a company name.',
+      'Add one or more visitors: search your existing registry or fill in a new visitor manually.',
+      'Each visitor gets an independent security check — you can invite multiple people in one go.',
+      'Blacklisted visitors appear in red and cannot be added to an invitation.',
+    ],
+  },
+  {
+    title: 'Active Invitations panel',
+    items: [
+      'Pending — the security team has not yet reviewed the visitor. No action needed from you.',
+      'In Review — security has a question. Open the invitation and answer it to unblock the process.',
+      'You have up to 5 clarification rounds; after the 5th unanswered round the visit is auto-refused.',
+    ],
+  },
+  {
+    title: 'Invitation history',
+    items: [
+      'Use the History link in the sidebar to see all past invitations grouped by month.',
+      'The current month is always shown at the top. Past months lazy-load when you expand them.',
+      'Click any invitation row to see full details: visitors, security decisions, and check-in records.',
+    ],
+  },
+  {
+    title: 'My Performances panel',
+    items: [
+      'Shows your invitation streak, overall approval rate, and rank among inviters.',
+      'Collapsed by default — click the panel header to expand.',
+    ],
+  },
+  {
+    title: 'Supervised tab (supervisors only)',
+    items: [
+      'Appears if you have been assigned as a supervisor by the admin.',
+      'You can answer a clarification question on behalf of a supervisee without claiming the invitation.',
+      "To take full control click Claim — the invitation is permanently transferred to your account and cannot be returned.",
+    ],
+  },
+]
 import { useAuth }     from '../context/AuthContext'
+import { useTheme }   from '../context/ThemeContext'
 import { useTaskSSE }  from '../hooks/useTaskSSE'
-import { useInviterStats } from '../hooks/useInviterStats'
-import { useOrgStats }     from '../hooks/useOrgStats'
 import {
   getTasksByAssignee, searchVisitors, getEntrances,
-  createInvitation, getMyInvitations, getInvitation,
+  createInvitation, getMyInvitations, getMyInvitationMonths, getInvitation,
   getTaskLocalVariable, getSecurityCheck, clarifySecurityCheck,
   getSuperviseeInvitations, claimInvitation, getTasksForProcess,
+  getMySupervisees,
 } from '../api/operatonApi'
 
 const { Title, Text } = Typography
@@ -31,6 +77,14 @@ const STATUS_COLOR = { PENDING: 'processing', APPROVED: 'success', REFUSED: 'err
 const STATUS_LABEL = { PENDING: 'Pending', APPROVED: 'Approved', REFUSED: 'Refused', IN_REVIEW: 'In Review' }
 const SC_STATUS_COLOR = { PENDING: 'default', APPROVED: 'success', REFUSED: 'error', BLACKLISTED: 'error' }
 const VISIT_STATUS_COLOR = { PENDING: 'default', CHECKED_IN: 'success', NO_SHOW: 'warning' }
+
+const MONTH_NAMES = ['January','February','March','April','May','June',
+                     'July','August','September','October','November','December']
+
+function monthKey(year, month) { return `${year}-${String(month).padStart(2, '0')}` }
+
+const _today = new Date()
+const CURRENT_MONTH_KEY = monthKey(_today.getFullYear(), _today.getMonth() + 1)
 
 // ── Visitor registry search ───────────────────────────────────────────────────
 function VisitorSearch({ credentials, onSelect }) {
@@ -71,20 +125,44 @@ function VisitorSearch({ credentials, onSelect }) {
           <List
             size="small"
             dataSource={results}
-            renderItem={v => (
-              <List.Item
-                style={{ cursor: 'pointer', padding: '8px 12px', transition: 'background 0.15s' }}
-                onClick={() => onSelect(v)}
-                onMouseEnter={e => e.currentTarget.style.background = '#f5f5f5'}
-                onMouseLeave={e => e.currentTarget.style.background = ''}
-              >
-                <List.Item.Meta
-                  avatar={<Avatar size={28} style={{ background: '#1677ff', fontSize: 12 }}>{v.firstName?.[0]?.toUpperCase() ?? '?'}</Avatar>}
-                  title={<Text style={{ fontSize: 13, fontWeight: 600 }}>{v.firstName} {v.lastName}</Text>}
-                  description={<Space size={4}><Tag icon={<BankOutlined />} style={{ fontSize: 11, margin: 0 }}>{v.company}</Tag></Space>}
-                />
-              </List.Item>
-            )}
+            renderItem={v => {
+              const blocked = v.blacklisted
+              return (
+                <List.Item
+                  aria-disabled={blocked}
+                  aria-label={blocked ? `${v.firstName} ${v.lastName} – blacklisted, cannot be invited` : undefined}
+                  style={{
+                    cursor: blocked ? 'not-allowed' : 'pointer',
+                    padding: '8px 12px',
+                    transition: 'background 0.15s',
+                    background: blocked ? '#fff1f0' : undefined,
+                    borderLeft: blocked ? '3px solid #ff7875' : '3px solid transparent',
+                  }}
+                  onClick={() => { if (!blocked) onSelect(v) }}
+                  onMouseEnter={e => { if (!blocked) e.currentTarget.style.background = '#f5f5f5' }}
+                  onMouseLeave={e => { if (!blocked) e.currentTarget.style.background = '' }}
+                >
+                  <List.Item.Meta
+                    avatar={
+                      <Avatar size={28} style={{ background: blocked ? '#cf1322' : '#1677ff', fontSize: 12 }}>
+                        {blocked
+                          ? <><StopOutlined aria-hidden="true" style={{ fontSize: 13 }} /><span className="sr-only">Blacklisted</span></>
+                          : (v.firstName?.[0]?.toUpperCase() ?? '?')}
+                      </Avatar>
+                    }
+                    title={
+                      <Space size={6}>
+                        <Text style={{ fontSize: 13, fontWeight: 600, color: blocked ? '#595959' : undefined }}>
+                          {v.firstName} {v.lastName}
+                        </Text>
+                        {blocked && <Tag color="error" style={{ fontSize: 11, margin: 0 }}>Blacklisted – cannot be invited</Tag>}
+                      </Space>
+                    }
+                    description={<Space size={4}><Tag icon={<BankOutlined aria-hidden="true" />} style={{ fontSize: 11, margin: 0 }}>{v.company}</Tag></Space>}
+                  />
+                </List.Item>
+              )
+            }}
           />
         </div>
       ) : !loading ? (
@@ -95,7 +173,7 @@ function VisitorSearch({ credentials, onSelect }) {
 }
 
 // ── Invitation drill-down modal ───────────────────────────────────────────────
-function InvitationDrillModal({ open, invitationId, credentials, onClose }) {
+function InvitationDrillModal({ open, invitationId, credentials, onClose, userMap }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -129,34 +207,51 @@ function InvitationDrillModal({ open, invitationId, credentials, onClose }) {
             </Space>
             {inv.description && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>{inv.description}</Text>}
           </div>
-          {(inv.visitors ?? []).map(v => (
-            <Card
-              key={v.visitorId} size="small" style={{ marginBottom: 12, borderColor: '#f0f0f0' }}
-              title={
-                <Space>
-                  <UserOutlined />
-                  <Text strong>{v.firstName} {v.lastName}</Text>
-                  {v.company && <Text type="secondary" style={{ fontSize: 12 }}>· {v.company}</Text>}
-                  <Tag color={SC_STATUS_COLOR[v.securityCheckStatus] ?? 'default'} style={{ margin: 0 }}>
-                    {v.securityCheckStatus ?? '—'}
-                  </Tag>
-                  {v.reliability != null && <Tag color={v.reliability > 60 ? 'success' : v.reliability > 30 ? 'warning' : 'error'}>{v.reliability}</Tag>}
-                </Space>
-              }
-            >
-              {(v.visits ?? []).length > 0 ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {v.visits.map(vs => (
-                    <Tag key={vs.id} color={VISIT_STATUS_COLOR[vs.status] ?? 'default'} style={{ fontSize: 11 }}>
-                      {vs.visitDate} · {vs.status}
-                    </Tag>
-                  ))}
+          {(inv.visitors ?? []).map(v => {
+            const ps = getCheckProcessStatus({ ...v, status: v.securityCheckStatus })
+            const officerName = formatUser(v.securityReviewer ?? v.assignedTo, userMap)
+            return (
+              <Card
+                key={v.visitorId} size="small" style={{ marginBottom: 12, borderColor: '#f0f0f0' }}
+                title={
+                  <Space wrap>
+                    <UserOutlined />
+                    <Text strong>{v.firstName} {v.lastName}</Text>
+                    {v.company && <Text type="secondary" style={{ fontSize: 12 }}>· {v.company}</Text>}
+                    {v.reliability != null && <Tag color={v.reliability > 60 ? 'success' : v.reliability > 30 ? 'warning' : 'error'}>Reliability: {v.reliability}</Tag>}
+                  </Space>
+                }
+              >
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '2px 10px', borderRadius: 20,
+                    background: ps.bg, border: `1px solid ${ps.color}55`,
+                  }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: ps.color, flexShrink: 0 }} />
+                    <Text style={{ fontSize: 11, fontWeight: 600, color: ps.color }}>{ps.label}</Text>
+                  </div>
                 </div>
-              ) : (
-                <Text type="secondary" style={{ fontSize: 12 }}>No visits yet.</Text>
-              )}
-            </Card>
-          ))}
+                {officerName && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <Tag style={{ margin: 0, fontSize: 10, borderRadius: 10 }} color="orange">Security officer</Tag>
+                    <Text style={{ fontSize: 12 }}>{officerName}</Text>
+                  </div>
+                )}
+                {(v.visits ?? []).length > 0 ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {v.visits.map(vs => (
+                      <Tag key={vs.id} color={VISIT_STATUS_COLOR[vs.status] ?? 'default'} style={{ fontSize: 11 }}>
+                        {vs.visitDate} · {vs.status}
+                      </Tag>
+                    ))}
+                  </div>
+                ) : (
+                  <Text type="secondary" style={{ fontSize: 12 }}>No visits yet.</Text>
+                )}
+              </Card>
+            )
+          })}
         </>
       )}
     </Modal>
@@ -165,10 +260,20 @@ function InvitationDrillModal({ open, invitationId, credentials, onClose }) {
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function InviterDashboard() {
-  const { auth } = useAuth()
+  const { auth }  = useAuth()
+  const { dark }  = useTheme()
+  const userMap   = useUserMap(auth)
+  usePageHelp(HELP_SECTIONS)
+  // Cat 2: theme-aware secondary text — passes WCAG AA on both light and dark card bg
+  const textSub = dark ? '#a0a0a0' : '#6b6b6b'
 
-  // Data
-  const [invitations, setInvitations] = useState([])
+  // Data — month-grouped invitations
+  const [monthsIndex,   setMonthsIndex]   = useState([])          // [{year,month,count}]
+  const [loadedMonths,  setLoadedMonths]  = useState({})          // { "YYYY-MM": Invitation[] }
+  const [loadingMonths, setLoadingMonths] = useState({})          // { "YYYY-MM": bool }
+  const [expandedKeys,  setExpandedKeys]  = useState([CURRENT_MONTH_KEY])
+  const loadedMonthsRef = useRef({})
+
   const [clarTasks,   setClarTasks]   = useState([])
   const [clarSCs,     setClarSCs]     = useState({})   // taskId → SecurityCheck | null
   const [loading,     setLoading]     = useState(true)
@@ -183,9 +288,10 @@ export default function InviterDashboard() {
     prevClarCount.current = clarTasks.length
   }, [clarTasks.length])
 
-  // Stats
-  const { stats: inviterStats, loading: statsLoading } = useInviterStats(auth)
-  const { stats: orgStats,     loading: orgLoading   } = useOrgStats(auth)
+
+  // Derived: active invitations from all loaded months
+  const pendingInvs  = useMemo(() => Object.values(loadedMonths).flat().filter(inv => inv.status === 'PENDING'),   [loadedMonths])
+  const inReviewInvs = useMemo(() => Object.values(loadedMonths).flat().filter(inv => inv.status === 'IN_REVIEW'), [loadedMonths])
 
   // Invitation creation form
   const [inviteOpen,   setInviteOpen]   = useState(false)
@@ -212,6 +318,7 @@ export default function InviterDashboard() {
   // Supervised invitations
   const [superviseeInvs,   setSuperviseeInvs]   = useState([])
   const [svLoading,        setSvLoading]        = useState(false)
+  const [mySupervisees,    setMySupervisees]    = useState([])
 
   // Claim modal
   const [claimOpen,        setClaimOpen]        = useState(false)
@@ -234,11 +341,31 @@ export default function InviterDashboard() {
   const loadData = useCallback(async () => {
     setError('')
     try {
-      const [invs, assigned] = await Promise.all([
-        getMyInvitations(auth),
+      // Build the set of months to refresh: current month + all already-loaded months
+      const alreadyLoaded = Object.keys(loadedMonthsRef.current)
+      const nowYear  = _today.getFullYear()
+      const nowMonth = _today.getMonth() + 1
+      const monthsToFetch = [
+        { year: nowYear, month: nowMonth },
+        ...alreadyLoaded
+          .filter(k => k !== CURRENT_MONTH_KEY)
+          .map(k => { const [y, m] = k.split('-').map(Number); return { year: y, month: m } }),
+      ]
+
+      const [months, assigned, ...monthResults] = await Promise.all([
+        getMyInvitationMonths(auth),
         getTasksByAssignee(auth),
+        ...monthsToFetch.map(({ year, month }) => getMyInvitations(auth, year, month)),
       ])
-      setInvitations(invs)
+
+      setMonthsIndex(months)
+
+      const nextLoaded = { ...loadedMonthsRef.current }
+      monthsToFetch.forEach(({ year, month }, i) => {
+        nextLoaded[monthKey(year, month)] = monthResults[i]
+      })
+      setLoadedMonths(nextLoaded)
+      loadedMonthsRef.current = nextLoaded
 
       const clarOnly = assigned.filter(t => t.taskDefinitionKey === 'Activity_Clarification_V2')
       setClarTasks(clarOnly)
@@ -257,16 +384,52 @@ export default function InviterDashboard() {
       setError('Failed to load: ' + (e.message ?? 'unknown'))
     } finally { setLoading(false) }
 
-    // Also reload supervised invitations for supervisors
+    // Also reload supervised invitations + supervisee list for supervisors
     if (auth?.isSupervisor) {
       setSvLoading(true)
-      try { setSuperviseeInvs(await getSuperviseeInvitations(auth)) }
-      catch { /* non-critical */ }
+      try {
+        const [invs, supervisees] = await Promise.all([
+          getSuperviseeInvitations(auth),
+          getMySupervisees(auth),
+        ])
+        setSuperviseeInvs(invs)
+        setMySupervisees(supervisees)
+      } catch { /* non-critical */ }
       finally { setSvLoading(false) }
     }
   }, [auth])
 
+  // Keep ref in sync so loadData always sees the current loaded set without a dep cycle
+  useEffect(() => { loadedMonthsRef.current = loadedMonths }, [loadedMonths])
+
   useTaskSSE(loadData)
+
+  // ── Lazy-load a month when its panel is opened ─────────────────────────────
+  const handlePanelChange = useCallback(async (keys) => {
+    setExpandedKeys(keys)
+    for (const key of keys) {
+      if (key in loadedMonthsRef.current) continue        // already loaded
+      if (loadingMonths[key]) continue                    // fetch in flight
+      const [yr, mo] = key.split('-').map(Number)
+      setLoadingMonths(prev => ({ ...prev, [key]: true }))
+      try {
+        const invs = await getMyInvitations(auth, yr, mo)
+        setLoadedMonths(prev => {
+          const next = { ...prev, [key]: invs }
+          loadedMonthsRef.current = next
+          return next
+        })
+      } catch {
+        setLoadedMonths(prev => {
+          const next = { ...prev, [key]: [] }
+          loadedMonthsRef.current = next
+          return next
+        })
+      } finally {
+        setLoadingMonths(prev => ({ ...prev, [key]: false }))
+      }
+    }
+  }, [auth, loadingMonths])
 
   // ── Invitation form ────────────────────────────────────────────────────────
   const handleOpenInvite = () => {
@@ -284,6 +447,7 @@ export default function InviterDashboard() {
 
   const handleAddFromRegistry = () => {
     if (!pendingReg) return
+    if (pendingReg.blacklisted) return
     // Avoid duplicates (same id)
     if (visitorList.some(v => v.mode === 'registry' && v.id === pendingReg.id)) return
     setVisitorList(prev => [...prev, { mode: 'registry', id: pendingReg.id, label: `${pendingReg.firstName} ${pendingReg.lastName} (${pendingReg.company})` }])
@@ -421,62 +585,16 @@ export default function InviterDashboard() {
     } finally { setSvClarSubmitting(false) }
   }
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-  const renderStats = () => {
-    if (statsLoading) return (
-      <Row gutter={12} style={{ marginBottom: 20 }}>
-        {[1,2,3,4].map(i => <Col key={i} xs={12} sm={6}><div style={{ background: '#f5f5f5', borderRadius: 10, height: 80 }} /></Col>)}
-      </Row>
-    )
-    if (!inviterStats) return null
-    const { total, approvalRate, approvalBadge, streak, milestone } = inviterStats
-    const milestoneColors = ['#8c8c8c','#1677ff','#d46b08','#531dab','#389e0d']
-    const milestoneIcons  = ['🌱','⭐','🏅','🏆','💎']
-    const mc = milestoneColors[milestone.level] ?? '#8c8c8c'
-    const mi = milestoneIcons[milestone.level]  ?? '🌱'
-    const progress = milestone.next
-      ? Math.min(100, Math.round(((total - milestone.min) / (milestone.next - milestone.min)) * 100))
-      : 100
-    const cards = [
-      { label: 'Invitations', value: total, sub: 'all time', color: '#1677ff' },
-      { label: 'Streak 🔥', value: streak > 0 ? `${streak}d` : '—', sub: streak > 0 ? `${streak} day${streak !== 1 ? 's' : ''} in a row` : 'No streak', color: streak >= 7 ? '#cc0000' : streak >= 3 ? '#d46b08' : '#8c8c8c' },
-      { label: 'Approval', value: approvalRate !== null ? `${approvalRate}%` : '—', sub: approvalBadge?.label ?? 'No data', color: approvalBadge?.color ?? '#8c8c8c' },
-      { label: 'Rank', value: `${mi} ${milestone.label}`, sub: milestone.next ? `${progress}% to ${milestone.nextLabel}` : 'Max level!', color: mc },
-    ]
-    return (
-      <div style={{ marginBottom: 20 }}>
-        <Row gutter={12} style={{ marginBottom: 8 }}>
-          {cards.map(({ label, value, sub, color }) => (
-            <Col key={label} xs={12} sm={6}>
-              <div style={{ border: `1px solid ${color}40`, background: `${color}08`, borderRadius: 10, padding: '12px 14px' }}>
-                <Text style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8c8c8c', display: 'block', marginBottom: 4 }}>{label}</Text>
-                <Text strong style={{ fontSize: 20, color, lineHeight: 1.1, display: 'block' }}>{value}</Text>
-                <Text style={{ fontSize: 11, color: '#8c8c8c' }}>{sub}</Text>
-              </div>
-            </Col>
-          ))}
-        </Row>
-        {milestone.next && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Text style={{ fontSize: 11, color: '#8c8c8c', whiteSpace: 'nowrap', minWidth: 120 }}>
-              Next: {milestoneIcons[milestone.level + 1]} {milestone.nextLabel}
-            </Text>
-            <div style={{ flex: 1, height: 6, borderRadius: 3, background: mc + '20' }}>
-              <div style={{ width: `${progress}%`, height: '100%', borderRadius: 3, background: mc, transition: 'width 0.6s ease' }} />
-            </div>
-            <Text style={{ fontSize: 11, color: '#8c8c8c', minWidth: 32, textAlign: 'right' }}>{progress}%</Text>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   // ── Invitation list row ────────────────────────────────────────────────────
   const InvitationRow = ({ inv }) => {
     const days = dayjs(inv.endDate).diff(dayjs(inv.startDate), 'day') + 1
     return (
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Invitation ${inv.startDate} to ${inv.endDate}, ${inv.entranceName}, status: ${STATUS_LABEL[inv.status] ?? inv.status}`}
         onClick={() => setDrillId(inv.id)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDrillId(inv.id) } }}
         style={{
           display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
           cursor: 'pointer', borderBottom: '1px solid #f0f0f0',
@@ -495,12 +613,12 @@ export default function InviterDashboard() {
             <Tag icon={<LoginOutlined />} style={{ fontSize: 11, margin: 0 }}>{inv.entranceName}</Tag>
             {inv.company && <Tag icon={<BankOutlined />} style={{ fontSize: 11, margin: 0 }}>{inv.company}</Tag>}
           </Space>
-          {inv.description && <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>{inv.description}</Text>}
+          {inv.description && <Text style={{ fontSize: 13, color: textSub, display: 'block' }}>{inv.description}</Text>}
         </div>
         <Tag color={STATUS_COLOR[inv.status] ?? 'default'} style={{ flexShrink: 0 }}>
           {STATUS_LABEL[inv.status] ?? inv.status}
         </Tag>
-        <DownOutlined style={{ fontSize: 11, color: '#8c8c8c', flexShrink: 0 }} />
+        <DownOutlined aria-hidden="true" style={{ fontSize: 11, color: textSub, flexShrink: 0 }} />
       </div>
     )
   }
@@ -508,26 +626,73 @@ export default function InviterDashboard() {
   // ── Clarification task card ────────────────────────────────────────────────
   const ClarTaskCard = ({ task }) => {
     const sc = clarSCs[task.id]
+    const [showParticipants, setShowParticipants] = useState(false)
+    const { label: statusLabel, color: statusColor, bg: statusBg } = sc
+      ? getCheckProcessStatus(sc)
+      : { label: 'Clarification Requested', color: '#d46b08', bg: '#fffbe6' }
+    const officerName = sc ? formatUser(sc.securityReviewer ?? sc.assignedTo, userMap) : null
+
     return (
       <Card
         size="small"
         style={{ borderRadius: 12, border: '1px solid #ffd591', background: '#fffbe6' }}
         styles={{ body: { padding: 14 } }}
       >
-        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+        <Space direction="vertical" size={6} style={{ width: '100%' }}>
           {sc ? (
             <>
-              <Space>
-                <UserOutlined style={{ color: '#8c8c8c' }} />
-                <Text strong style={{ fontSize: 13 }}>{sc.visitorFirstName} {sc.visitorLastName}</Text>
-                {sc.visitorCompany && <Text type="secondary" style={{ fontSize: 12 }}>· {sc.visitorCompany}</Text>}
-              </Space>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <Space>
+                  <UserOutlined aria-hidden="true" style={{ color: textSub }} />
+                  <Text strong style={{ fontSize: 13 }}>{sc.visitorFirstName} {sc.visitorLastName}</Text>
+                  {sc.visitorCompany && <Text style={{ fontSize: 13, color: textSub }}>· {sc.visitorCompany}</Text>}
+                </Space>
+              </div>
+              <div
+                role="status"
+                aria-label={`Status: ${statusLabel}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '2px 10px', borderRadius: 20,
+                  background: statusBg, border: `1px solid ${statusColor}55`,
+                }}
+              >
+                <div aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+                <Text style={{ fontSize: 13, fontWeight: 600, color: statusColor }}>{statusLabel}</Text>
+              </div>
               <div style={{ background: '#fff7e6', border: '1px solid #ffd591', borderRadius: 6, padding: '8px 12px' }}>
-                <Text style={{ fontSize: 11, color: '#d46b08', fontWeight: 600, display: 'block', marginBottom: 2 }}>
-                  Security's question {sc.clarificationCount > 0 ? `(attempt ${sc.clarificationCount})` : ''}
+                <Text style={{ fontSize: 13, color: '#d46b08', fontWeight: 600, display: 'block', marginBottom: 2 }}>
+                  Security's question {sc.clarificationCount > 0 ? `(round ${sc.clarificationCount}/5)` : ''}
                 </Text>
                 <Text style={{ fontSize: 13 }}>{sc.clarificationQuestion ?? '—'}</Text>
               </div>
+              {officerName && (
+                <div style={{ borderTop: '1px solid #ffe7ba', paddingTop: 6 }}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={showParticipants}
+                    onClick={() => setShowParticipants(o => !o)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowParticipants(o => !o) } }}
+                    style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, userSelect: 'none' }}
+                  >
+                    <TeamOutlined aria-hidden="true" style={{ fontSize: 11, color: textSub }} />
+                    <Text style={{ fontSize: 13, color: textSub }}>
+                      {showParticipants ? 'Hide participants' : 'Show participants'}
+                    </Text>
+                    <span aria-hidden="true" style={{
+                      fontSize: 11, color: textSub, display: 'inline-block',
+                      transform: showParticipants ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s',
+                    }}>▾</span>
+                  </div>
+                  {showParticipants && (
+                    <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Tag style={{ margin: 0, fontSize: 11, borderRadius: 10 }} color="orange">Security officer</Tag>
+                      <Text style={{ fontSize: 13 }}>{officerName}</Text>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             <Spin size="small" />
@@ -538,7 +703,7 @@ export default function InviterDashboard() {
             onClick={() => handleOpenClar(task.id)}
             disabled={!sc}
           >
-            Answer
+            Answer Security Question
           </Button>
         </Space>
       </Card>
@@ -598,18 +763,27 @@ export default function InviterDashboard() {
 
   return (
     <Layout>
+      <GreetingOverlay />
       {error && <Alert type="error" message={error} showIcon closable onClose={() => setError('')} style={{ marginBottom: 16 }} />}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <Title level={4} style={{ margin: 0 }}><Tx k="inviter.title" /></Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Title level={4} style={{ margin: 0 }}><Tx k="inviter.title" /></Title>
+            {(auth?.firstName || auth?.lastName) && (
+              <Tag icon={<UserOutlined />} style={{ fontSize: 13, fontWeight: 600, borderRadius: 20 }}>
+                {[auth.firstName, auth.lastName].filter(Boolean).join(' ')}
+              </Tag>
+            )}
+          </div>
           <Text type="secondary" style={{ fontSize: 13 }}>
             {lastRefresh ? `Live · updated ${lastRefresh.toLocaleTimeString()}` : 'Connecting…'}
           </Text>
         </div>
         <Space>
           <Tooltip title="Refresh now">
-            <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading} />
+            <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}
+              aria-label="Refresh invitations" />
           </Tooltip>
           <Button type="primary" icon={<PlusCircleOutlined />} onClick={handleOpenInvite}>
             New Invitation
@@ -617,7 +791,74 @@ export default function InviterDashboard() {
         </Space>
       </div>
 
-      {renderStats()}
+      {/* ── Active Invitations panel ── */}
+      <Collapse
+        defaultActiveKey={['active']}
+        style={{ marginBottom: 12, borderRadius: 8 }}
+        items={[{
+          key: 'active',
+          label: (
+            <Space size={6}>
+              <ClockCircleOutlined />
+              <span>Active Invitations</span>
+              {pendingInvs.length > 0  && <Badge count={pendingInvs.length}  style={{ backgroundColor: '#8c8c8c' }} />}
+              {inReviewInvs.length > 0 && <Badge count={inReviewInvs.length} style={{ backgroundColor: '#d46b08' }} />}
+            </Space>
+          ),
+          children: (
+            <Tabs
+              size="small"
+              defaultActiveKey="pending"
+              items={[
+                {
+                  key: 'pending',
+                  label: (
+                    <Space size={4}>
+                      <ClockCircleOutlined />
+                      <span>Pending</span>
+                      {pendingInvs.length > 0 && <Badge count={pendingInvs.length} style={{ backgroundColor: '#8c8c8c' }} />}
+                    </Space>
+                  ),
+                  children: loading ? (
+                    <div style={{ padding: 24, textAlign: 'center' }}><Spin /></div>
+                  ) : pendingInvs.length === 0 ? (
+                    <div style={{ padding: '24px 0', textAlign: 'center' }}>
+                      <ClockCircleOutlined style={{ fontSize: 32, color: '#d9d9d9', marginBottom: 8 }} />
+                      <div><Text type="secondary">No pending invitations.</Text></div>
+                    </div>
+                  ) : (
+                    <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, overflow: 'hidden' }}>
+                      {pendingInvs.map(inv => <InvitationRow key={inv.id} inv={inv} />)}
+                    </div>
+                  ),
+                },
+                {
+                  key: 'inreview',
+                  label: (
+                    <Space size={4}>
+                      <StopOutlined style={{ color: inReviewInvs.length > 0 ? '#d46b08' : undefined }} />
+                      <span style={{ color: inReviewInvs.length > 0 ? '#d46b08' : undefined }}>In Review</span>
+                      {inReviewInvs.length > 0 && <Badge count={inReviewInvs.length} style={{ backgroundColor: '#d46b08' }} />}
+                    </Space>
+                  ),
+                  children: loading ? (
+                    <div style={{ padding: 24, textAlign: 'center' }}><Spin /></div>
+                  ) : inReviewInvs.length === 0 ? (
+                    <div style={{ padding: '24px 0', textAlign: 'center' }}>
+                      <StopOutlined style={{ fontSize: 32, color: '#d9d9d9', marginBottom: 8 }} />
+                      <div><Text type="secondary">No invitations currently in review.</Text></div>
+                    </div>
+                  ) : (
+                    <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, overflow: 'hidden' }}>
+                      {inReviewInvs.map(inv => <InvitationRow key={inv.id} inv={inv} />)}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          ),
+        }]}
+      />
 
       <Tabs
         activeKey={activeTab}
@@ -629,21 +870,87 @@ export default function InviterDashboard() {
               <Space size={6}>
                 <UserAddOutlined />
                 <span>My Invitations</span>
-                {invitations.length > 0 && <Badge count={invitations.length} style={{ backgroundColor: '#1677ff' }} />}
+                {monthsIndex.length > 0 && (
+                  <Badge
+                    count={monthsIndex.reduce((s, m) => s + m.count, 0)}
+                    style={{ backgroundColor: '#1677ff' }}
+                    overflowCount={999}
+                  />
+                )}
               </Space>
             ),
             children: loading ? (
               <div style={{ padding: 24, textAlign: 'center' }}><Spin /></div>
-            ) : invitations.length === 0 ? (
-              <div style={{ padding: 48, textAlign: 'center', borderRadius: 12, border: '2px dashed #e8e8e8' }}>
-                <UserAddOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
-                <div><Text type="secondary"><Tx k="inviter.emptyState" /></Text></div>
-              </div>
-            ) : (
-              <div style={{ border: '1px solid #e8e8e8', borderRadius: 10, overflow: 'hidden' }}>
-                {invitations.map(inv => <InvitationRow key={inv.id} inv={inv} />)}
-              </div>
-            ),
+            ) : (() => {
+              // Always show current month at top even if it has no entries yet
+              const hasCurrentInIndex = monthsIndex.some(m => monthKey(m.year, m.month) === CURRENT_MONTH_KEY)
+              const base = hasCurrentInIndex
+                ? monthsIndex
+                : [{ year: _today.getFullYear(), month: _today.getMonth() + 1, count: 0 }, ...monthsIndex]
+              const allMonths = [...base].sort((a, b) => {
+                const ak = monthKey(a.year, a.month)
+                const bk = monthKey(b.year, b.month)
+                if (ak === CURRENT_MONTH_KEY) return -1
+                if (bk === CURRENT_MONTH_KEY) return 1
+                return bk > ak ? 1 : bk < ak ? -1 : 0
+              })
+
+              if (allMonths.length === 0) return (
+                <div style={{ padding: 48, textAlign: 'center', borderRadius: 12, border: '2px dashed #e8e8e8' }}>
+                  <UserAddOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
+                  <div><Text type="secondary"><Tx k="inviter.emptyState" /></Text></div>
+                </div>
+              )
+
+              const collapseItems = allMonths.map(m => {
+                const key  = monthKey(m.year, m.month)
+                const isCurrentMonth = key === CURRENT_MONTH_KEY
+                const invs = loadedMonths[key]
+                const isLoading = !!loadingMonths[key]
+                const label = `${MONTH_NAMES[m.month - 1]} ${m.year}`
+
+                return {
+                  key,
+                  label: (
+                    <Space size={6}>
+                      <Text strong style={{ color: isCurrentMonth ? '#1677ff' : undefined }}>{label}</Text>
+                      {isCurrentMonth && <Tag color="blue" style={{ margin: 0 }}>Current</Tag>}
+                      <Badge
+                        count={isCurrentMonth ? (invs?.length ?? m.count) : m.count}
+                        showZero={isCurrentMonth}
+                        style={{ backgroundColor: isCurrentMonth ? '#1677ff' : '#8c8c8c' }}
+                        overflowCount={999}
+                      />
+                    </Space>
+                  ),
+                  children: isLoading ? (
+                    <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+                  ) : !invs ? (
+                    <div style={{ padding: 24, textAlign: 'center' }}>
+                      <Text type="secondary">Loading…</Text>
+                    </div>
+                  ) : invs.length === 0 ? (
+                    <div style={{ padding: '32px 0', textAlign: 'center', border: '2px dashed #e8e8e8', borderRadius: 8 }}>
+                      <UserAddOutlined style={{ fontSize: 36, color: '#d9d9d9', marginBottom: 8 }} />
+                      <div><Text type="secondary">No invitations in {label}.</Text></div>
+                    </div>
+                  ) : (
+                    <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, overflow: 'hidden' }}>
+                      {invs.map(inv => <InvitationRow key={inv.id} inv={inv} />)}
+                    </div>
+                  ),
+                }
+              })
+
+              return (
+                <Collapse
+                  activeKey={expandedKeys}
+                  onChange={handlePanelChange}
+                  style={{ background: 'transparent', border: 'none' }}
+                  items={collapseItems}
+                />
+              )
+            })(),
           },
           {
             key: 'questions',
@@ -682,16 +989,43 @@ export default function InviterDashboard() {
             ),
             children: svLoading ? (
               <div style={{ padding: 24, textAlign: 'center' }}><Spin /></div>
-            ) : superviseeInvs.length === 0 ? (
+            ) : mySupervisees.length === 0 ? (
               <div style={{ padding: 48, textAlign: 'center', borderRadius: 12, border: '2px dashed #e8e8e8' }}>
                 <TeamOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
                 <div><Text type="secondary">No supervised invitations.</Text></div>
               </div>
-            ) : (
-              <div style={{ border: '1px solid #e8e8e8', borderRadius: 10, overflow: 'hidden' }}>
-                {superviseeInvs.map(inv => <SuperviseeInvRow key={inv.id} inv={inv} />)}
-              </div>
-            ),
+            ) : (() => {
+              const invsByInviter = superviseeInvs.reduce((acc, inv) => {
+                const key = inv.inviterUsername ?? 'Unknown'
+                if (!acc[key]) acc[key] = []
+                acc[key].push(inv)
+                return acc
+              }, {})
+              return mySupervisees.map(inviter => {
+                const invs = invsByInviter[inviter] ?? []
+                return (
+                  <div key={inviter} style={{ marginBottom: 20 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 12px', marginBottom: 0,
+                      background: '#e6f4ff', borderRadius: '8px 8px 0 0',
+                      border: '1px solid #91caff', borderBottom: 'none',
+                    }}>
+                      <UserOutlined style={{ color: '#1677ff' }} />
+                      <Text strong style={{ color: '#1677ff' }}>{inviter}</Text>
+                      <Tag color="blue" style={{ margin: 0 }}>{invs.length} invitation{invs.length !== 1 ? 's' : ''}</Tag>
+                    </div>
+                    <div style={{ border: '1px solid #91caff', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
+                      {invs.length === 0 ? (
+                        <div style={{ padding: '12px 16px', color: textSub, fontSize: 13 }}>
+                          No invitations yet.
+                        </div>
+                      ) : invs.map(inv => <SuperviseeInvRow key={inv.id} inv={inv} />)}
+                    </div>
+                  </div>
+                )
+              })
+            })(),
           }] : []),
         ]}
       />
@@ -752,10 +1086,11 @@ export default function InviterDashboard() {
             <div style={{ marginBottom: 8, border: '1px solid #f0f0f0', borderRadius: 8, overflow: 'hidden' }}>
               {visitorList.map((v, idx) => (
                 <div key={v.id ?? v.key} style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', borderBottom: idx < visitorList.length - 1 ? '1px solid #f0f0f0' : undefined }}>
-                  <UserOutlined style={{ marginRight: 8, color: '#8c8c8c' }} />
+                  <UserOutlined style={{ marginRight: 8, color: textSub }} />
                   <Text style={{ flex: 1, fontSize: 13 }}>{v.label}</Text>
                   <Tag style={{ fontSize: 11, margin: 0, marginRight: 8 }}>{v.mode === 'registry' ? 'Registry' : 'New'}</Tag>
-                  <Button type="text" size="small" icon={<CloseCircleOutlined />} onClick={() => handleRemoveVisitor(idx)} style={{ color: '#ff4d4f', padding: 0 }} />
+                  <Button type="text" size="small" icon={<CloseCircleOutlined />} onClick={() => handleRemoveVisitor(idx)} style={{ color: '#ff4d4f', padding: 0 }}
+                    aria-label={`Remove ${v.label} from invitation`} />
                 </div>
               ))}
             </div>
@@ -880,7 +1215,8 @@ export default function InviterDashboard() {
         {clarError && <Alert type="error" message={clarError} showIcon closable onClose={() => setClarError('')} style={{ marginBottom: 12 }} />}
         <div style={{ marginBottom: 16 }}>
           <Text strong style={{ display: 'block', marginBottom: 6 }}>Your answer</Text>
-          <Input.TextArea rows={3} placeholder="Enter your clarification…" value={clarAnswer} onChange={e => setClarAnswer(e.target.value)} />
+          <Input.TextArea rows={3} placeholder="Enter your clarification…" value={clarAnswer} onChange={e => setClarAnswer(e.target.value)}
+            aria-label="Your answer to the security question" />
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Button onClick={() => setClarOpen(false)} disabled={clarSubmitting}>Cancel</Button>
@@ -894,6 +1230,7 @@ export default function InviterDashboard() {
         invitationId={drillId}
         credentials={auth}
         onClose={() => setDrillId(null)}
+        userMap={userMap}
       />
 
       {/* ── Claim invitation modal (supervisor) ── */}
@@ -930,6 +1267,7 @@ export default function InviterDashboard() {
                 value={claimVisitorId}
                 onChange={e => setClaimVisitorId(e.target.value)}
                 style={{ width: '100%' }}
+                aria-label="Select the visitor who triggered this claim"
               >
                 <Space direction="vertical" style={{ width: '100%' }}>
                   {(claimInvDetail.visitors ?? []).map(v => (
@@ -997,7 +1335,8 @@ export default function InviterDashboard() {
             <div style={{ marginBottom: 16 }}>
               <Text strong style={{ display: 'block', marginBottom: 6 }}>Your answer</Text>
               <Input.TextArea rows={3} placeholder="Enter your clarification…"
-                value={svClarAnswer} onChange={e => setSvClarAnswer(e.target.value)} />
+                value={svClarAnswer} onChange={e => setSvClarAnswer(e.target.value)}
+                aria-label="Your answer to the security question" />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <Button onClick={() => setSvClarOpen(false)} disabled={svClarSubmitting}>Cancel</Button>

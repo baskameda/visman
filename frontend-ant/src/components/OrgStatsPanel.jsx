@@ -107,12 +107,14 @@ export default function OrgStatsPanel({ stats, loading, onRefresh, isAdmin = fal
           {isAdmin && (
             <Tooltip title="Configure challenge">
               <Button type="text" size="small" icon={<SettingOutlined style={{ fontSize: 13 }} />}
-                onClick={() => setChallengeOpen(true)} />
+                onClick={() => setChallengeOpen(true)} aria-label="Configure challenge" />
             </Tooltip>
           )}
           <Button type="text" size="small"
             icon={expanded ? <UpOutlined style={{ fontSize: 12 }} /> : <DownOutlined style={{ fontSize: 12 }} />}
-            onClick={() => setExpanded(e => !e)} />
+            onClick={() => setExpanded(e => !e)}
+            aria-label={expanded ? 'Collapse stats panel' : 'Expand stats panel'}
+            aria-expanded={expanded} />
         </Space>
       </div>
 

@@ -3,6 +3,7 @@ import {
   Row, Col, Typography, Alert, Button, Modal,
   Tag, Tooltip, Space, Divider, Checkbox, Input,
   Descriptions, Tabs, Table, message, Card, Spin, Slider,
+  Collapse, Badge,
 } from 'antd'
 import {
   SafetyCertificateOutlined, ReloadOutlined,
@@ -14,19 +15,60 @@ import {
 } from '@ant-design/icons'
 import Layout              from '../components/Layout'
 import Tx                  from '../components/Tx'
-import OrgStatsPanel       from '../components/OrgStatsPanel'
-import SecurityStatsPanel  from '../components/SecurityStatsPanel'
+import GreetingOverlay     from '../components/GreetingOverlay'
+import { usePageHelp }     from '../hooks/usePageHelp'
+
+const HELP_SECTIONS = [
+  {
+    title: 'Active Checks panel',
+    items: [
+      'My Checks — tasks assigned directly to you. Act on them as soon as possible.',
+      'Others — checks assigned to colleagues or not yet claimed. Tap Claim to take ownership if needed.',
+    ],
+  },
+  {
+    title: 'Reviewing a visitor',
+    items: [
+      "Click Action on a check card to open the review form.",
+      "Tick Identity Confirmed once you have verified the visitor's identity documents.",
+      'Choose one of four outcomes: Approve, Refuse, Blacklist, or Ask Inviter.',
+      'A note is required when refusing or blacklisting, and optional otherwise.',
+    ],
+  },
+  {
+    title: 'Ask Inviter',
+    items: [
+      'Sends a clarification question back to the inviter.',
+      'The task returns to you with their answer for a final decision.',
+      'After 5 unanswered rounds the system automatically refuses the visit.',
+    ],
+  },
+  {
+    title: 'Blacklist',
+    items: [
+      'A blacklisted visitor is permanently blocked from all future invitations system-wide.',
+      'Use the Blacklist tab to review entries and remove them if circumstances change.',
+    ],
+  },
+  {
+    title: 'Supervised tab (supervisors only)',
+    items: [
+      'Appears if the admin has assigned you as a security supervisor.',
+      'You can decide or claim any pending check belonging to your supervisees.',
+    ],
+  },
+]
 import { useAuth }         from '../context/AuthContext'
+import { useTheme }        from '../context/ThemeContext'
 import { useTranslation }  from 'react-i18next'
 import { useTaskSSE }      from '../hooks/useTaskSSE'
-import { useOrgStats }     from '../hooks/useOrgStats'
-import { useSecurityStats } from '../hooks/useSecurityStats'
+import { useUserMap, formatUser, getCheckProcessStatus } from '../hooks/useUserMap'
 import {
   getTasksByGroup, getTasksByAssignee, claimTask,
   getBlacklistedVisitors, clearBlacklisted,
   getTaskLocalVariable, decideSecurityCheck,
   getPendingMineChecks, getPendingOthersChecks, getPendingSuperviseeChecks,
-  claimSecurityCheck,
+  claimSecurityCheck, getMySecuritySupervisees,
 } from '../api/operatonApi'
 
 const { Title, Text } = Typography
@@ -102,9 +144,78 @@ function BlacklistPanel({ auth, t }) {
   )
 }
 
+// ── Process status pill ───────────────────────────────────────────────────────
+function ProcessStatusPill({ sc }) {
+  const { label, color, bg } = getCheckProcessStatus(sc)
+  return (
+    <div
+      role="status"
+      aria-label={`Status: ${label}`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '2px 10px', borderRadius: 20,
+        background: bg, border: `1px solid ${color}55`,
+      }}
+    >
+      <div aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      <Text style={{ fontSize: 13, fontWeight: 600, color }}>{label}</Text>
+    </div>
+  )
+}
+
+// ── Participants collapse row ──────────────────────────────────────────────────
+function ParticipantsRow({ participants }) {
+  const { dark } = useTheme()
+  const textSub  = dark ? '#a0a0a0' : '#6b6b6b'
+  const [open, setOpen] = useState(false)
+  const visible = participants.filter(p => p?.name)
+  if (visible.length === 0) return null
+
+  const toggle = () => setOpen(o => !o)
+  const handleKey = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }
+
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={toggle}
+        onKeyDown={handleKey}
+        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, userSelect: 'none' }}
+      >
+        <TeamOutlined aria-hidden="true" style={{ fontSize: 11, color: textSub }} />
+        <Text style={{ fontSize: 13, color: textSub }}>
+          {open ? 'Hide participants' : 'Show participants'}
+        </Text>
+        <span aria-hidden="true" style={{
+          fontSize: 11, color: textSub,
+          display: 'inline-block',
+          transform: open ? 'rotate(180deg)' : 'none',
+          transition: 'transform 0.2s',
+        }}>▾</span>
+      </div>
+      {open && (
+        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {visible.map((p, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Tag style={{ margin: 0, fontSize: 11, borderRadius: 10 }} color={p.tagColor ?? 'default'}>
+                {p.role}
+              </Tag>
+              <Text style={{ fontSize: 13 }}>{p.name}</Text>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Security check card ───────────────────────────────────────────────────────
-function SecCheckCard({ sc, task, onAction, onClaim, readOnly }) {
-  const { t } = useTranslation()
+function SecCheckCard({ sc, task, onAction, onClaim, readOnly, userMap }) {
+  const { t }   = useTranslation()
+  const { dark } = useTheme()
+  const textSub  = dark ? '#a0a0a0' : '#6b6b6b'
   const [claiming, setClaiming] = useState(false)
 
   const period = sc.startDate === sc.endDate
@@ -117,6 +228,12 @@ function SecCheckCard({ sc, task, onAction, onClaim, readOnly }) {
     finally { setClaiming(false) }
   }
 
+  const effectiveOfficer = sc.securityReviewer ?? sc.assignedTo
+  const participants = [
+    sc.inviterUsername ? { role: 'Invited by',       name: formatUser(sc.inviterUsername, userMap),    tagColor: 'blue'   } : null,
+    effectiveOfficer   ? { role: 'Security officer', name: formatUser(effectiveOfficer,   userMap),    tagColor: 'orange' } : null,
+  ]
+
   return (
     <Card
       variant="borderless"
@@ -125,27 +242,25 @@ function SecCheckCard({ sc, task, onAction, onClaim, readOnly }) {
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.10)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = ''}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
         <Text strong style={{ fontSize: 13 }}>{sc.visitorFirstName} {sc.visitorLastName}</Text>
-        <Space size={4}>
-          {sc.securityReviewer && <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>{sc.securityReviewer}</Tag>}
-          <Tag color="warning" style={{ margin: 0 }}>Pending</Tag>
-        </Space>
+        {sc.securityReviewer && <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>{sc.securityReviewer}</Tag>}
       </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <ProcessStatusPill sc={sc} />
+      </div>
+
       <Space direction="vertical" size={4} style={{ flex: 1, marginBottom: 12 }}>
-        {sc.visitorCompany   && <Space size={6}><BankOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>{sc.visitorCompany}</Text></Space>}
-        {sc.visitorFunction  && <Space size={6}><ToolOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>{sc.visitorFunction}</Text></Space>}
-        <Space size={6}><CalendarOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>{period}</Text></Space>
-        <Space size={6}><LoginOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>{sc.entranceName}</Text></Space>
-        {sc.assignedTo && <Space size={6}><UserOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>Assigned to {sc.assignedTo}</Text></Space>}
-        {sc.inviterUsername  && <Space size={6}><UserOutlined style={{ color: '#8c8c8c', fontSize: 12 }} /><Text type="secondary" style={{ fontSize: 12 }}>Invited by {sc.inviterUsername}</Text></Space>}
-        {sc.clarificationCount > 0 && (
-          <Tag color="warning" style={{ fontSize: 11 }}>
-            {sc.clarificationCount} clarification{sc.clarificationCount !== 1 ? 's' : ''}
-          </Tag>
-        )}
+        {sc.visitorCompany  && <Space size={6}><BankOutlined aria-hidden="true" style={{ color: textSub, fontSize: 13 }} /><Text style={{ fontSize: 13, color: textSub }}>{sc.visitorCompany}</Text></Space>}
+        {sc.visitorFunction && <Space size={6}><ToolOutlined aria-hidden="true" style={{ color: textSub, fontSize: 13 }} /><Text style={{ fontSize: 13, color: textSub }}>{sc.visitorFunction}</Text></Space>}
+        <Space size={6}><CalendarOutlined aria-hidden="true" style={{ color: textSub, fontSize: 13 }} /><Text style={{ fontSize: 13, color: textSub }}>{period}</Text></Space>
+        <Space size={6}><LoginOutlined aria-hidden="true" style={{ color: textSub, fontSize: 13 }} /><Text style={{ fontSize: 13, color: textSub }}>{sc.entranceName}</Text></Space>
       </Space>
-      <Divider style={{ margin: '0 0 12px' }} />
+
+      <ParticipantsRow participants={participants} />
+
+      <Divider style={{ margin: '12px 0' }} />
       {readOnly ? (
         <Button block disabled icon={<EyeOutlined />}>Read Only</Button>
       ) : (
@@ -166,7 +281,7 @@ function SecCheckCard({ sc, task, onAction, onClaim, readOnly }) {
 }
 
 // ── Check grid ────────────────────────────────────────────────────────────────
-function CheckGrid({ checks, scToTask, onAction, onClaim, readOnly, emptyText, loading }) {
+function CheckGrid({ checks, scToTask, onAction, onClaim, readOnly, emptyText, loading, userMap }) {
   if (loading) return (
     <Row gutter={[16, 16]}>
       {[1, 2, 3].map(i => <Col key={i} xs={24} sm={12} md={8}><div style={{ height: 200, background: '#f5f5f5', borderRadius: 12 }} /></Col>)}
@@ -188,6 +303,7 @@ function CheckGrid({ checks, scToTask, onAction, onClaim, readOnly, emptyText, l
             onAction={onAction}
             onClaim={onClaim}
             readOnly={readOnly}
+            userMap={userMap}
           />
         </Col>
       ))}
@@ -198,12 +314,18 @@ function CheckGrid({ checks, scToTask, onAction, onClaim, readOnly, emptyText, l
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function SecurityDashboard() {
   const { auth }     = useAuth()
+  const { dark }     = useTheme()
   const { t }        = useTranslation()
   const isSupervisor = auth?.isSecuritySupervisor ?? false
+  const userMap      = useUserMap(auth)
+  usePageHelp(HELP_SECTIONS)
+  // Cat 2: theme-aware secondary text that passes WCAG AA in both light and dark
+  const textSub = dark ? '#a0a0a0' : '#6b6b6b'
 
   const [mineChecks,      setMineChecks]      = useState([])
   const [othersChecks,    setOthersChecks]    = useState([])
   const [superviseeChecks,setSuperviseeChecks] = useState([])
+  const [mySupervisees,   setMySupervisees]   = useState([])
   const [scToTask,        setScToTask]        = useState({})  // scId → bpmn task
   const [loading,         setLoading]         = useState(true)
   const [error,           setError]           = useState('')
@@ -244,11 +366,17 @@ export default function SecurityDashboard() {
 
       // Load categorised check lists from backend
       const requests = [getPendingMineChecks(auth), getPendingOthersChecks(auth)]
-      if (isSupervisor) requests.push(getPendingSuperviseeChecks(auth))
+      if (isSupervisor) {
+        requests.push(getPendingSuperviseeChecks(auth))
+        requests.push(getMySecuritySupervisees(auth))
+      }
       const results = await Promise.all(requests)
       setMineChecks(results[0])
       setOthersChecks(results[1])
-      if (isSupervisor) setSuperviseeChecks(results[2])
+      if (isSupervisor) {
+        setSuperviseeChecks(results[2])
+        setMySupervisees(results[3])
+      }
 
       setLastRefresh(new Date())
     } catch (e) {
@@ -257,8 +385,6 @@ export default function SecurityDashboard() {
   }, [auth, t, isSupervisor])
 
   useTaskSSE(loadTasks)
-  const { stats: orgStats, loading: orgLoading, refresh: orgRefresh } = useOrgStats(auth)
-  const { stats: secStats, loading: secLoading, refresh: secRefresh } = useSecurityStats(auth)
 
   const handleOpenDialog = async (task, sc) => {
     if (task) { try { await claimTask(auth, task.id) } catch {} }
@@ -327,69 +453,7 @@ export default function SecurityDashboard() {
     { key: 'entrance',label: <><LoginOutlined /> Entrance</>,  children: activeSC.entranceName },
   ].filter(Boolean) : []
 
-  const refreshBar = (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-      <Text type="secondary" style={{ fontSize: 13 }}>
-        {lastRefresh
-          ? <Tx k="common.liveUpdated" vars={{ time: lastRefresh.toLocaleTimeString() }} />
-          : <Tx k="common.connecting" />}
-      </Text>
-      <Tooltip title={t('common.refreshNow')}>
-        <Button icon={<ReloadOutlined />} onClick={loadTasks} loading={loading} />
-      </Tooltip>
-    </div>
-  )
-
-  const tabItems = [
-    {
-      key: 'mine',
-      label: (
-        <Space>
-          <SafetyCertificateOutlined />
-          My Checks
-          {mineChecks.length > 0 && <Tag color="warning" style={{ marginLeft: 4 }}>{mineChecks.length}</Tag>}
-        </Space>
-      ),
-      children: (
-        <>
-          {error && <Alert type="error" message={error} showIcon closable onClose={() => setError('')} style={{ marginBottom: 16 }} />}
-          {refreshBar}
-          <CheckGrid
-            checks={mineChecks}
-            scToTask={scToTask}
-            onAction={handleOpenDialog}
-            onClaim={null}
-            readOnly={false}
-            emptyText={t('security.emptyState')}
-            loading={loading}
-          />
-        </>
-      ),
-    },
-    {
-      key: 'others',
-      label: (
-        <Space>
-          <EyeOutlined />
-          Others
-          {othersChecks.length > 0 && <Tag color="default" style={{ marginLeft: 4 }}>{othersChecks.length}</Tag>}
-        </Space>
-      ),
-      children: (
-        <>
-          <Alert type="info" showIcon message="Checks assigned to other officers — read only." style={{ marginBottom: 16 }} />
-          <CheckGrid
-            checks={othersChecks}
-            scToTask={scToTask}
-            onAction={handleOpenDialog}
-            onClaim={null}
-            readOnly={true}
-            emptyText="No checks assigned to other officers."
-            loading={loading}
-          />
-        </>
-      ),
-    },
+  const secondaryTabItems = [
     ...(isSupervisor ? [{
       key: 'supervised',
       label: (
@@ -399,20 +463,61 @@ export default function SecurityDashboard() {
           {superviseeChecks.length > 0 && <Tag color="purple" style={{ marginLeft: 4 }}>{superviseeChecks.length}</Tag>}
         </Space>
       ),
-      children: (
-        <>
-          <Alert type="info" showIcon message="Pending checks of your supervisees. You can decide or claim ownership." style={{ marginBottom: 16 }} />
-          <CheckGrid
-            checks={superviseeChecks}
-            scToTask={scToTask}
-            onAction={handleOpenDialog}
-            onClaim={handleClaim}
-            readOnly={false}
-            emptyText="No pending checks for your supervisees."
-            loading={loading}
-          />
-        </>
-      ),
+      children: (() => {
+        const checksByOfficer = superviseeChecks.reduce((acc, sc) => {
+          const key = sc.assignedTo ?? 'Unassigned'
+          if (!acc[key]) acc[key] = []
+          acc[key].push(sc)
+          return acc
+        }, {})
+        return (
+          <>
+            <Alert type="info" showIcon message="Pending checks of your supervisees. You can decide or claim ownership." style={{ marginBottom: 16 }} />
+            {loading ? (
+              <CheckGrid checks={[]} scToTask={{}} onAction={handleOpenDialog} onClaim={handleClaim}
+                readOnly={false} emptyText="" loading={true} userMap={userMap} />
+            ) : mySupervisees.length === 0 ? (
+              <div style={{ padding: 48, textAlign: 'center', border: '2px dashed #e8e8e8', borderRadius: 12 }}>
+                <SafetyCertificateOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
+                <div><Text type="secondary">No supervisees assigned.</Text></div>
+              </div>
+            ) : (
+              mySupervisees.map(officer => {
+                const checks = checksByOfficer[officer] ?? []
+                return (
+                  <div key={officer} style={{ marginBottom: 28 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 12px', marginBottom: 12,
+                      background: '#fff7e6', borderRadius: 8, border: '1px solid #ffd591',
+                    }}>
+                      <UserOutlined style={{ color: '#d46b08' }} />
+                      <Text strong style={{ color: '#d46b08' }}>{officer}</Text>
+                      <Tag color="orange" style={{ margin: 0 }}>{checks.length} check{checks.length !== 1 ? 's' : ''}</Tag>
+                    </div>
+                    {checks.length === 0 ? (
+                      <div style={{ padding: '12px 16px', color: textSub, fontSize: 13, border: '1px dashed #e8e8e8', borderRadius: 8 }}>
+                        No pending checks.
+                      </div>
+                    ) : (
+                      <CheckGrid
+                        checks={checks}
+                        scToTask={scToTask}
+                        onAction={handleOpenDialog}
+                        onClaim={handleClaim}
+                        readOnly={false}
+                        emptyText=""
+                        loading={false}
+                        userMap={userMap}
+                      />
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </>
+        )
+      })(),
     }] : []),
     {
       key: 'blacklist',
@@ -428,11 +533,107 @@ export default function SecurityDashboard() {
 
   return (
     <Layout>
-      <OrgStatsPanel stats={orgStats} loading={orgLoading} onRefresh={orgRefresh}
-        isAdmin={auth?.isAlsoAdmin ?? auth?.role === 'ADMIN'} />
-      <SecurityStatsPanel stats={secStats} loading={secLoading} />
+      <GreetingOverlay />
+      {error && <Alert type="error" message={error} showIcon closable onClose={() => setError('')} style={{ marginBottom: 16 }} />}
 
-      <Tabs items={tabItems} style={{ marginBottom: 0 }} />
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Title level={4} style={{ margin: 0 }}><Tx k="security.title" /></Title>
+            {(auth?.firstName || auth?.lastName) && (
+              <Tag icon={<UserOutlined />} style={{ fontSize: 13, fontWeight: 600, borderRadius: 20 }}>
+                {[auth.firstName, auth.lastName].filter(Boolean).join(' ')}
+              </Tag>
+            )}
+          </div>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            {lastRefresh
+              ? <Tx k="common.liveUpdated" vars={{ time: lastRefresh.toLocaleTimeString() }} />
+              : <Tx k="common.connecting" />}
+          </Text>
+        </div>
+        <Tooltip title={t('common.refreshNow')}>
+          <Button icon={<ReloadOutlined />} onClick={loadTasks} loading={loading}
+            aria-label={t('common.refreshNow')} />
+        </Tooltip>
+      </div>
+
+      {/* ── Active Checks panel ── */}
+      <Collapse
+        defaultActiveKey={['active']}
+        style={{ marginBottom: 12, borderRadius: 8 }}
+        items={[{
+          key: 'active',
+          label: (
+            <Space size={6}>
+              <SafetyCertificateOutlined />
+              <span>Active Checks</span>
+              {mineChecks.length > 0   && <Badge count={mineChecks.length}   style={{ backgroundColor: '#d46b08' }} />}
+              {othersChecks.length > 0 && <Badge count={othersChecks.length} style={{ backgroundColor: '#8c8c8c' }} />}
+            </Space>
+          ),
+          children: (
+            <Tabs
+              size="small"
+              defaultActiveKey="mine"
+              items={[
+                {
+                  key: 'mine',
+                  label: (
+                    <Space size={4}>
+                      <SafetyCertificateOutlined style={{ color: mineChecks.length > 0 ? '#d46b08' : undefined }} />
+                      <span style={{ color: mineChecks.length > 0 ? '#d46b08' : undefined }}>My Checks</span>
+                      {mineChecks.length > 0 && <Badge count={mineChecks.length} style={{ backgroundColor: '#d46b08' }} />}
+                    </Space>
+                  ),
+                  children: (
+                    <CheckGrid
+                      checks={mineChecks}
+                      scToTask={scToTask}
+                      onAction={handleOpenDialog}
+                      onClaim={null}
+                      readOnly={false}
+                      emptyText={t('security.emptyState')}
+                      loading={loading}
+                      userMap={userMap}
+                    />
+                  ),
+                },
+                {
+                  key: 'others',
+                  label: (
+                    <Space size={4}>
+                      <EyeOutlined />
+                      <span>Others</span>
+                      {othersChecks.length > 0 && <Badge count={othersChecks.length} style={{ backgroundColor: '#8c8c8c' }} />}
+                    </Space>
+                  ),
+                  children: (
+                    <>
+                      <Alert type="info" showIcon message="Checks assigned to other officers — read only." style={{ marginBottom: 12 }} />
+                      <CheckGrid
+                        checks={othersChecks}
+                        scToTask={scToTask}
+                        onAction={handleOpenDialog}
+                        onClaim={null}
+                        readOnly={true}
+                        emptyText="No checks assigned to other officers."
+                        loading={loading}
+                        userMap={userMap}
+                      />
+                    </>
+                  ),
+                },
+              ]}
+            />
+          ),
+        }]}
+      />
+
+
+      {/* ── Secondary tabs: Supervised + Blacklist ── */}
+      <Tabs items={secondaryTabItems} style={{ marginBottom: 0 }} />
 
       {/* ════ Review Modal ════ */}
       <Modal
@@ -503,13 +704,15 @@ export default function SecurityDashboard() {
           <Text strong style={{ display: 'block', marginBottom: 6 }}>
             Reliability Score (for Approve): <Tag color={reliability > 60 ? 'success' : reliability > 30 ? 'warning' : 'error'}>{reliability}</Tag>
           </Text>
-          <Slider min={0} max={100} value={reliability} onChange={setReliability} marks={{ 0: '0', 50: '50', 100: '100' }} />
+          <Slider min={0} max={100} value={reliability} onChange={setReliability} marks={{ 0: '0', 50: '50', 100: '100' }}
+            aria-label="Reliability score" aria-valuetext={`${reliability} out of 100`} />
         </div>
 
         {/* Note */}
         <div style={{ marginBottom: 12 }}>
           <Text strong style={{ display: 'block', marginBottom: 6 }}>{t('security.noteLabel')}</Text>
-          <TextArea rows={2} placeholder={t('security.notePlaceholder')} value={note} onChange={e => setNote(e.target.value)} />
+          <TextArea rows={2} placeholder={t('security.notePlaceholder')} value={note} onChange={e => setNote(e.target.value)}
+            aria-label={t('security.noteLabel')} />
         </div>
 
         {/* Clarification question */}
@@ -519,7 +722,8 @@ export default function SecurityDashboard() {
             <Text strong style={{ fontSize: 12 }}>{t('security.clarificationQuestion')}</Text>
             <Text type="secondary" style={{ fontSize: 11 }}>(for Ask Inviter)</Text>
           </Space>
-          <TextArea rows={2} placeholder={t('security.clarificationQuestion') + '…'} value={clarQuestion} onChange={e => setClarQuestion(e.target.value)} />
+          <TextArea rows={2} placeholder={t('security.clarificationQuestion') + '…'} value={clarQuestion} onChange={e => setClarQuestion(e.target.value)}
+            aria-label={t('security.clarificationQuestion')} />
         </div>
 
         {validationErr && <Alert type="error" message={validationErr} showIcon style={{ marginBottom: 12 }} />}

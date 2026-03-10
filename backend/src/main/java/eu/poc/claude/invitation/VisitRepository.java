@@ -1,6 +1,7 @@
 package eu.poc.claude.invitation;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
@@ -24,14 +25,16 @@ public class VisitRepository {
     private static final String FULL_SELECT =
         "SELECT vt.id, vt.security_check_id, vt.visitor_id, vt.invitation_id, " +
         "       vt.visit_date, vt.entrance_id, vt.status, " +
-        "       vt.checked_in_at, vt.checked_in_by, " +
+        "       vt.checked_in_at, vt.checked_in_by, vt.checkin_lat, vt.checkin_lng, " +
         "       e.entrance_name, " +
         "       v.first_name, v.last_name, v.company AS visitor_company, v.visitor_function, " +
-        "       i.start_date AS inv_start, i.end_date AS inv_end, i.inviter_username " +
+        "       i.start_date AS inv_start, i.end_date AS inv_end, i.inviter_username, " +
+        "       COALESCE(sc.security_reviewer, sc.assigned_to) AS security_approver " +
         "FROM poc_visit vt " +
         "JOIN poc_visitor    v  ON v.id  = vt.visitor_id " +
         "JOIN poc_entrance   e  ON e.id  = vt.entrance_id " +
-        "JOIN poc_invitation i  ON i.id  = vt.invitation_id ";
+        "JOIN poc_invitation i  ON i.id  = vt.invitation_id " +
+        "LEFT JOIN poc_security_check sc ON sc.id = vt.security_check_id ";
 
     private Visit map(java.sql.ResultSet rs, int rn) throws java.sql.SQLException {
         Visit v = new Visit();
@@ -46,6 +49,8 @@ public class VisitRepository {
         Timestamp ci = rs.getTimestamp("checked_in_at");
         if (ci != null) v.setCheckedInAt(ci.toLocalDateTime());
         v.setCheckedInBy(        rs.getString("checked_in_by"));
+        v.setCheckinLat(         rs.getObject("checkin_lat") instanceof Number n ? n.doubleValue() : null);
+        v.setCheckinLng(         rs.getObject("checkin_lng") instanceof Number n ? n.doubleValue() : null);
         v.setVisitorFirstName(   rs.getString("first_name"));
         v.setVisitorLastName(    rs.getString("last_name"));
         v.setVisitorCompany(     rs.getString("visitor_company"));
@@ -53,6 +58,7 @@ public class VisitRepository {
         v.setInvitationStartDate(rs.getDate("inv_start").toLocalDate());
         v.setInvitationEndDate(  rs.getDate("inv_end").toLocalDate());
         v.setInviterUsername(    rs.getString("inviter_username"));
+        v.setSecurityApprover(   rs.getString("security_approver"));
         return v;
     }
 
@@ -154,6 +160,85 @@ public class VisitRepository {
             entranceIds.toArray());
     }
 
+    // ── Entrance-day aggregation (for admin chart) ──────────────────────────────
+
+    public record EntranceDayCount(String date, long entranceId, String entranceName, int count) {}
+
+    public List<EntranceDayCount> countCheckinsByEntranceAndDay(int days, Long locationId) {
+        String sql =
+            "SELECT CAST(vt.checked_in_at AS DATE) AS day, " +
+            "       vt.entrance_id, e.entrance_name, COUNT(*) AS cnt " +
+            "FROM poc_visit vt " +
+            "JOIN poc_entrance e ON e.id = vt.entrance_id " +
+            "WHERE vt.status = 'CHECKED_IN' " +
+            "  AND vt.checked_in_at >= DATEADD(day, ?, GETDATE()) ";
+        if (locationId != null) sql += "  AND e.location_id = ? ";
+        sql += "GROUP BY CAST(vt.checked_in_at AS DATE), vt.entrance_id, e.entrance_name " +
+               "ORDER BY day, e.entrance_name";
+
+        final ResultSetExtractor<List<EntranceDayCount>> mapper = rs -> {
+            List<EntranceDayCount> list = new java.util.ArrayList<>();
+            while (rs.next()) list.add(new EntranceDayCount(
+                rs.getDate("day").toLocalDate().toString(),
+                rs.getLong("entrance_id"),
+                rs.getString("entrance_name"),
+                rs.getInt("cnt")));
+            return list;
+        };
+        if (locationId != null)
+            return jdbc.query(sql, mapper, -days, locationId);
+        else
+            return jdbc.query(sql, mapper, -days);
+    }
+
+    // ── Sankey aggregation ─────────────────────────────────────────────────────
+
+    public record SankeyRow(String inviterUsername, String securityOfficer,
+                             String gatekeeper, String entranceName, int count) {}
+
+    public record RefusedRow(String securityOfficer, String status, int count) {}
+
+    /** Full path rows for CHECKED_IN visits — one row per unique 4-tuple. */
+    public List<SankeyRow> getSankeyRows(int days) {
+        return jdbc.query(
+            "SELECT i.inviter_username, sc.assigned_to AS security_officer, " +
+            "       v.checked_in_by AS gatekeeper, e.entrance_name, COUNT(*) AS cnt " +
+            "FROM poc_visit v " +
+            "JOIN poc_security_check sc ON sc.id = v.security_check_id " +
+            "JOIN poc_invitation      i  ON i.id  = v.invitation_id " +
+            "JOIN poc_entrance        e  ON e.id  = v.entrance_id " +
+            "WHERE v.status = 'CHECKED_IN' " +
+            "  AND v.visit_date >= DATEADD(day, ?, CAST(GETDATE() AS DATE)) " +
+            "  AND i.inviter_username IS NOT NULL " +
+            "  AND sc.assigned_to     IS NOT NULL " +
+            "  AND v.checked_in_by    IS NOT NULL " +
+            "GROUP BY i.inviter_username, sc.assigned_to, v.checked_in_by, e.entrance_name",
+            (rs, rn) -> new SankeyRow(
+                rs.getString("inviter_username"),
+                rs.getString("security_officer"),
+                rs.getString("gatekeeper"),
+                rs.getString("entrance_name"),
+                rs.getInt("cnt")),
+            -days);
+    }
+
+    /** Refused/blacklisted counts grouped by security officer and status. */
+    public List<RefusedRow> getRefusedSummary(int days) {
+        return jdbc.query(
+            "SELECT sc.assigned_to AS security_officer, sc.status, COUNT(*) AS cnt " +
+            "FROM poc_security_check sc " +
+            "WHERE sc.status IN ('REFUSED', 'BLACKLISTED') " +
+            "  AND sc.decided_at >= DATEADD(day, ?, GETDATE()) " +
+            "  AND sc.assigned_to IS NOT NULL " +
+            "GROUP BY sc.assigned_to, sc.status " +
+            "ORDER BY sc.assigned_to, sc.status",
+            (rs, rn) -> new RefusedRow(
+                rs.getString("security_officer"),
+                rs.getString("status"),
+                rs.getInt("cnt")),
+            -days);
+    }
+
     public List<Visit> findByEntrancesAndDateRange(List<Long> entranceIds, LocalDate from, LocalDate to) {
         if (entranceIds.isEmpty()) return List.of();
         String placeholders = String.join(",", entranceIds.stream().map(x -> "?").toList());
@@ -171,11 +256,13 @@ public class VisitRepository {
 
     // ── Update ─────────────────────────────────────────────────────────────────
 
-    public boolean checkIn(long id, String username) {
+    public boolean checkIn(long id, String username, Double lat, Double lng, LocalDateTime checkinAt) {
+        LocalDateTime ts = checkinAt != null ? checkinAt : LocalDateTime.now();
         int rows = jdbc.update(
-            "UPDATE poc_visit SET status = 'CHECKED_IN', checked_in_at = ?, checked_in_by = ? " +
+            "UPDATE poc_visit SET status = 'CHECKED_IN', checked_in_at = ?, checked_in_by = ?, " +
+            "checkin_lat = ?, checkin_lng = ? " +
             "WHERE id = ? AND status = 'PENDING'",
-            Timestamp.valueOf(LocalDateTime.now()), username, id);
+            Timestamp.valueOf(ts), username, lat, lng, id);
         return rows > 0;
     }
 }

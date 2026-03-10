@@ -1,21 +1,27 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Card, Form, Input, Button, Typography, Alert, Divider,
-  Space, Modal, Tooltip, Spin,
+  Space, Modal, Tooltip, Spin, Select, Radio, Tag,
 } from 'antd'
 import {
   UserOutlined, LockOutlined, SafetyOutlined,
   SafetyCertificateOutlined, CopyOutlined, CheckOutlined,
-  PlusCircleOutlined,
+  PlusCircleOutlined, InfoCircleOutlined, CheckCircleFilled,
 } from '@ant-design/icons'
 import { useNavigate }   from 'react-router-dom'
 import { useAuth }       from '../context/AuthContext'
+import { useLicence }    from '../context/LicenceContext'
 import { useTranslation } from 'react-i18next'
 import {
   verifyIdentity, getUserGroups,
-  getWebAdminUsers, createSuperheroAdmin, amISupervisor, amISecuritySupervisor,
+  getWebAdminUsers, createSuperheroAdmin,
+  amISupervisor, amISecuritySupervisor, amIGatekeeperSupervisor,
+  getAllUsersAsAdmin, resetPasswordToUserId,
+  getLocations, getUsersByLocation,
 } from '../api/operatonApi'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import WhyUsModal      from '../components/WhyUsModal'
+import PocSummaryModal from '../components/PocSummaryModal'
 
 const { Title, Text } = Typography
 
@@ -26,18 +32,66 @@ const GROUP_ROLE_MAP = {
   webAdmins: 'ADMIN',
 }
 
-const ROLE_ACCOUNTS = [
-  { username: 'inviter1',    password: 'inviter123',  roleKey: 'INVITER'    },
-  { username: 'security1',   password: 'security123', roleKey: 'SECURITY'   },
-  { username: 'gatekeeper1', password: 'porter123',   roleKey: 'GATEKEEPER' },
-]
+const ROLE_FEATURE = { INVITER: 'inviter', SECURITY: 'security', GATEKEEPER: 'gatekeeper' }
 
-const ROLE_COLORS = {
-  INVITER:    '#1677ff',
-  SECURITY:   '#d46b08',
-  GATEKEEPER: '#531dab',
-  ADMIN:      '#389e0d',
+const FEATURE_LABELS = {
+  security:    'Security',
+  inviter:     'Inviter',
+  gatekeeper:  'Gatekeeper',
+  gamification:'Gamification',
 }
+
+function LicenceStatusBox({ licenceLoaded, licenceMeta, featureActive }) {
+  if (!licenceLoaded) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '8px 12px', borderRadius: 8, marginBottom: 20,
+        background: '#f6ffed', border: '1px solid #b7eb8f',
+      }}>
+        <InfoCircleOutlined style={{ color: '#52c41a', fontSize: 14, flexShrink: 0 }} />
+        <Text style={{ fontSize: 12, color: '#389e0d' }}>
+          PoC mode — no licence loaded, all features available
+        </Text>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{
+      padding: '10px 12px', borderRadius: 8, marginBottom: 20,
+      background: '#f0f5ff', border: '1px solid #adc6ff',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <SafetyCertificateOutlined style={{ color: '#1677ff', fontSize: 14 }} />
+        <Text style={{ fontSize: 12, fontWeight: 600, color: '#1677ff' }}>
+          Licensed to: {licenceMeta.issuer}
+        </Text>
+        {licenceMeta.issuedAt && (
+          <Text type="secondary" style={{ fontSize: 11, marginLeft: 'auto' }}>
+            {licenceMeta.issuedAt}
+          </Text>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {Object.entries(FEATURE_LABELS).map(([key, label]) =>
+          featureActive[key] ? (
+            <Tag key={key} color="success" icon={<CheckCircleFilled />}
+              style={{ fontSize: 11, margin: 0 }}>
+              {label}
+            </Tag>
+          ) : (
+            <Tag key={key} icon={<LockOutlined />}
+              style={{ fontSize: 11, margin: 0, color: '#8c8c8c', borderColor: '#d9d9d9' }}>
+              {label}
+            </Tag>
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
 
 function CredBadge({ label, value }) {
   const [copied, setCopied] = useState(false)
@@ -75,31 +129,90 @@ export default function LoginPage() {
   const [creating,         setCreating]         = useState(false)
   const [createError,      setCreateError]      = useState('')
   const [createdModalOpen, setCreatedModalOpen] = useState(false)
+  const [locations,        setLocations]        = useState([])
+  const [selectedLocation, setSelectedLocation] = useState(null)
+  const [locationUsers,    setLocationUsers]    = useState([])
+  const [selectedRole,     setSelectedRole]     = useState(null)
+  const [userSearch,       setUserSearch]       = useState('')
+  const [quickLoading,     setQuickLoading]     = useState(false)
+  const [whyUsOpen,        setWhyUsOpen]        = useState(false)
+  const [pocSummaryLang,   setPocSummaryLang]   = useState(null)   // null | 'en' | 'de'
 
   const { login }  = useAuth()
   const navigate   = useNavigate()
   const { t }      = useTranslation()
+  const { licenceLoaded, licenceMeta, featureActive } = useLicence()
 
+  // Load locations + check for admin user on mount
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const members = await getWebAdminUsers()
-      if (cancelled) return
-      setAdminAccounts(members)
-      setHasAdminUser(members.length > 0)
+      try {
+        const [members, locs] = await Promise.all([getWebAdminUsers(), getLocations()])
+        if (cancelled) return
+        setAdminAccounts(members)
+        setHasAdminUser(members.length > 0)
+        setLocations(locs)
+      } catch { /* non-critical */ }
       setCheckingAdmin(false)
     })()
     return () => { cancelled = true }
   }, [])
 
-  const handleLogin = async (values) => {
+  // Derive available roles and filtered user list from loaded users
+  const availableRoles = useMemo(() => {
+    const present = new Set(locationUsers.map(u =>
+      u.id.startsWith('inviter')    ? 'INVITER'    :
+      u.id.startsWith('security')   ? 'SECURITY'   :
+      u.id.startsWith('gatekeeper') ? 'GATEKEEPER' : null
+    ).filter(Boolean))
+    return ['INVITER', 'SECURITY', 'GATEKEEPER'].filter(r =>
+      present.has(r) && featureActive[ROLE_FEATURE[r]]
+    )
+  }, [locationUsers, featureActive])
+
+  const filteredUsers = useMemo(() => {
+    const prefixMap = { INVITER: 'inviter', SECURITY: 'security', GATEKEEPER: 'gatekeeper' }
+    let users = selectedRole
+      ? locationUsers.filter(u => u.id.startsWith(prefixMap[selectedRole]))
+      : locationUsers
+    const q = userSearch.trim().toLowerCase()
+    if (q) users = users.filter(u =>
+      u.id.toLowerCase().includes(q) ||
+      (u.firstName && u.firstName.toLowerCase().includes(q)) ||
+      (u.lastName  && u.lastName.toLowerCase().includes(q))
+    )
+    return users
+  }, [locationUsers, selectedRole, userSearch])
+
+  // Load users for the selected location and reset their passwords
+  useEffect(() => {
+    if (selectedLocation == null) { setLocationUsers([]); setSelectedRole(null); setUserSearch(''); return }
+    let cancelled = false
+    setQuickLoading(true)
+    setSelectedRole(null)
+    setUserSearch('')
+    ;(async () => {
+      try {
+        const users = await getUsersByLocation(selectedLocation)
+        if (cancelled) return
+        await Promise.allSettled(users.map(u => resetPasswordToUserId(u.id)))
+        if (cancelled) return
+        setLocationUsers(users)
+      } catch { setLocationUsers([]) }
+      setQuickLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [selectedLocation])
+
+  const loginWithCredentials = async (username, password) => {
     setError('')
     setLoading(true)
     try {
-      const result = await verifyIdentity(values.username.trim(), values.password)
+      const result = await verifyIdentity(username, password)
       if (!result.authenticated) { setError(t('login.invalidCredentials')); return }
 
-      const credentials = { username: values.username.trim(), password: values.password }
+      const credentials = { username, password }
       const groups      = await getUserGroups(credentials)
       const groupIds    = groups.map(g => g.id)
 
@@ -111,13 +224,17 @@ export default function LoginPage() {
       const isAlsoAdmin = groupIds.includes('webAdmins')
       let isSupervisor = false
       let isSecuritySupervisor = false
+      let isGatekeeperSupervisor = false
       if (role === 'INVITER') {
         try { isSupervisor = (await amISupervisor({ ...credentials })).supervisor } catch {}
       }
       if (role === 'SECURITY') {
         try { isSecuritySupervisor = (await amISecuritySupervisor({ ...credentials })).supervisor } catch {}
       }
-      login({ ...credentials, firstName: credentials.username, role, isAlsoAdmin, isSupervisor, isSecuritySupervisor })
+      if (role === 'GATEKEEPER') {
+        try { isGatekeeperSupervisor = (await amIGatekeeperSupervisor({ ...credentials })).supervisor } catch {}
+      }
+      await login({ ...credentials, firstName: username, role, isAlsoAdmin, isSupervisor, isSecuritySupervisor, isGatekeeperSupervisor })
       const routes = { INVITER: '/inviter', SECURITY: '/security', GATEKEEPER: '/gatekeeper', ADMIN: '/admin' }
       navigate(routes[role] ?? '/inviter')
     } catch (err) {
@@ -126,6 +243,8 @@ export default function LoginPage() {
       setLoading(false)
     }
   }
+
+  const handleLogin = (values) => loginWithCredentials(values.username.trim(), values.password)
 
   const fillAccount = (acc) => {
     form.setFieldsValue({ username: acc.username, password: acc.password })
@@ -180,6 +299,64 @@ export default function LoginPage() {
         style={{ width: '100%', maxWidth: 420, borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.08)' }}
         styles={{ body: { padding: 32 } }}
       >
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <div
+            onClick={() => setWhyUsOpen(true)}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              cursor: 'pointer', padding: '8px 0', borderRadius: 8,
+              background: 'linear-gradient(135deg, #0d111708, #0f204408)',
+              border: '1px solid #1677ff20', transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.75'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+          >
+            <span style={{ fontSize: 15 }}>&#10024;</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#531dab', letterSpacing: 0.3 }}>
+              {t('nav.whyUs')}
+            </span>
+          </div>
+          <div
+            onClick={() => setPocSummaryLang('en')}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              cursor: 'pointer', padding: '8px 0', borderRadius: 8,
+              background: 'linear-gradient(135deg, #0d111708, #0f204408)',
+              border: '1px solid #1677ff20', transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.75'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+          >
+            <span style={{ fontSize: 13 }}>🇬🇧</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#1677ff', letterSpacing: 0.3 }}>
+              PoC Journey
+            </span>
+          </div>
+          <div
+            onClick={() => setPocSummaryLang('de')}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              cursor: 'pointer', padding: '8px 0', borderRadius: 8,
+              background: 'linear-gradient(135deg, #0d111708, #0f204408)',
+              border: '1px solid #1677ff20', transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.75'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+          >
+            <span style={{ fontSize: 13 }}>🇩🇪</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#531dab', letterSpacing: 0.3 }}>
+              PoC-Reise
+            </span>
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }} />
+
+        <LicenceStatusBox
+          licenceLoaded={licenceLoaded}
+          licenceMeta={licenceMeta}
+          featureActive={featureActive}
+        />
+
         <Title level={5} style={{ marginBottom: 4 }}>{t('login.signIn')}</Title>
         <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 24 }}>
           {t('login.useCredentials')}
@@ -207,66 +384,126 @@ export default function LoginPage() {
           </Form.Item>
         </Form>
 
-        <Divider plain style={{ margin: '24px 0', fontSize: 12, color: '#8c8c8c' }}>
+        <Divider plain style={{ margin: '24px 0 8px', fontSize: 12, color: '#8c8c8c' }}>
           {t('login.quickFill')}
         </Divider>
 
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
-          {ROLE_ACCOUNTS.map(acc => (
-            <Button key={acc.username} block size="small" onClick={() => fillAccount(acc)}
-              style={{
-                textAlign: 'left', height: 'auto', padding: '8px 12px',
-                borderColor: ROLE_COLORS[acc.roleKey] + '60', color: ROLE_COLORS[acc.roleKey],
-              }}>
-              <Space>
-                <UserOutlined />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.4 }}>{acc.username}</div>
-                  <div style={{ fontSize: 11, color: '#8c8c8c', lineHeight: 1.3 }}>{t('roles.' + acc.roleKey)}</div>
-                </div>
-              </Space>
-            </Button>
-          ))}
+        {/* Location selector */}
+        <Tooltip
+          title={
+            <div style={{ fontSize: 12, lineHeight: 1.7 }}>
+              <div><strong>Seeded test accounts per location</strong></div>
+              <div>Inviters:    inviter[N]</div>
+              <div>Gatekeepers: gatekeeper[N]</div>
+              <div>Security:    security[N]</div>
+              <div style={{ marginTop: 6, color: '#faad14' }}>
+                Passwords are reset to the username on this page for convenience.
+              </div>
+            </div>
+          }
+          placement="top"
+        >
+          <Text style={{ color: '#ff4d4f', fontSize: 11, display: 'block', textAlign: 'center', marginBottom: 8, cursor: 'default', textDecoration: 'underline dotted' }}>
+            This is for testing only!
+          </Text>
+        </Tooltip>
 
-          {checkingAdmin ? (
-            <div style={{ textAlign: 'center', padding: '8px 0' }}><Spin size="small" /></div>
-          ) : hasAdminUser ? (
-            adminAccounts.map(u => (
+        <Select
+          placeholder="Select a location…"
+          value={selectedLocation}
+          onChange={setSelectedLocation}
+          allowClear
+          onClear={() => setSelectedLocation(null)}
+          style={{ width: '100%', marginBottom: 10 }}
+          options={locations.map(l => ({ value: l.id, label: l.name }))}
+        />
+
+        {/* Role filter — shown once users are loaded */}
+        {!quickLoading && locationUsers.length > 0 && (
+          <Radio.Group
+            value={selectedRole}
+            onChange={e => { setSelectedRole(e.target.value); setUserSearch('') }}
+            style={{ display: 'flex', marginBottom: 10 }}
+          >
+            {availableRoles.map(role => (
+              <Radio.Button
+                key={role}
+                value={role}
+                style={{ flex: 1, textAlign: 'center', fontSize: 12 }}
+              >
+                {role === 'INVITER' ? 'Inviter' : role === 'SECURITY' ? 'Security' : 'Gatekeeper'}
+              </Radio.Button>
+            ))}
+          </Radio.Group>
+        )}
+
+        {/* Text search — shown after a role is selected */}
+        {selectedRole && (
+          <Input
+            prefix={<UserOutlined style={{ color: '#bfbfbf' }} />}
+            placeholder="Search by username or name…"
+            value={userSearch}
+            onChange={e => setUserSearch(e.target.value)}
+            allowClear
+            size="small"
+            style={{ marginBottom: 10 }}
+          />
+        )}
+
+        {/* User list for selected location */}
+        {quickLoading ? (
+          <div style={{ textAlign: 'center', padding: '8px 0' }}><Spin size="small" /></div>
+        ) : selectedLocation != null && selectedRole && filteredUsers.length > 0 ? (
+          <Space direction="vertical" size={6} style={{ width: '100%' }}>
+            {filteredUsers.map(u => (
               <Button key={u.id} block size="small"
-                onClick={() => fillAccount({ username: u.id, password: u.id === 'superhero' ? 'test123' : 'admin' })}
-                style={{
-                  textAlign: 'left', height: 'auto', padding: '8px 12px',
-                  borderColor: ROLE_COLORS.ADMIN + '60', color: ROLE_COLORS.ADMIN,
-                }}>
+                onClick={() => loginWithCredentials(u.id, u.id)}
+                loading={loading}
+                style={{ textAlign: 'left', height: 'auto', padding: '8px 12px' }}>
                 <Space>
-                  <SafetyCertificateOutlined />
+                  <UserOutlined />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.4 }}>{u.id}</div>
-                    <div style={{ fontSize: 11, color: '#8c8c8c', lineHeight: 1.3 }}>{t('roles.ADMIN')}</div>
+                    {(u.firstName || u.lastName) && (
+                      <div style={{ fontSize: 11, color: '#8c8c8c', lineHeight: 1.3 }}>
+                        {[u.firstName, u.lastName].filter(Boolean).join(' ')}
+                      </div>
+                    )}
                   </div>
                 </Space>
               </Button>
-            ))
-          ) : (
-            <div>
-              {createError && (
-                <Alert type="error" message={createError} showIcon closable
-                  onClose={() => setCreateError('')} style={{ marginBottom: 8 }} />
-              )}
-              <Button block size="small" loading={creating} icon={<PlusCircleOutlined />}
-                onClick={handleCreateAdmin}
-                style={{
-                  textAlign: 'left', height: 'auto', padding: '8px 12px',
-                  borderColor: '#fa8c16', color: '#d46b08',
-                }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.4 }}>{t('login.createAdminUser')}</div>
-                  <div style={{ fontSize: 11, color: '#8c8c8c', lineHeight: 1.3 }}>{t('login.noAdminFound')}</div>
-                </div>
-              </Button>
-            </div>
-          )}
-        </Space>
+            ))}
+          </Space>
+        ) : selectedLocation != null && selectedRole && !quickLoading ? (
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', textAlign: 'center' }}>
+            No users match.
+          </Text>
+        ) : selectedLocation != null && !quickLoading && locationUsers.length === 0 ? (
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', textAlign: 'center' }}>
+            No users assigned to this location.
+          </Text>
+        ) : null}
+
+        {/* Create admin button (shown when no admin exists and no location selected) */}
+        {!checkingAdmin && !hasAdminUser && selectedLocation == null && (
+          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            {createError && (
+              <Alert type="error" message={createError} showIcon closable
+                onClose={() => setCreateError('')} style={{ marginBottom: 8 }} />
+            )}
+            <Button block size="small" loading={creating} icon={<PlusCircleOutlined />}
+              onClick={handleCreateAdmin}
+              style={{
+                textAlign: 'left', height: 'auto', padding: '8px 12px',
+                borderColor: '#fa8c16', color: '#d46b08',
+              }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.4 }}>{t('login.createAdminUser')}</div>
+                <div style={{ fontSize: 11, color: '#8c8c8c', lineHeight: 1.3 }}>{t('login.noAdminFound')}</div>
+              </div>
+            </Button>
+          </Space>
+        )}
       </Card>
 
       <Text type="secondary" style={{ marginTop: 24, fontSize: 12 }}>
@@ -274,6 +511,9 @@ export default function LoginPage() {
         <a href="http://localhost:8080/operaton/app/cockpit" target="_blank" rel="noreferrer"
           style={{ color: '#8c8c8c' }}>{t('login.cockpitLink')}</a>
       </Text>
+
+      <WhyUsModal open={whyUsOpen} onClose={() => setWhyUsOpen(false)} />
+      <PocSummaryModal open={!!pocSummaryLang} lang={pocSummaryLang ?? 'en'} onClose={() => setPocSummaryLang(null)} />
 
       <Modal
         open={createdModalOpen} onCancel={() => setCreatedModalOpen(false)}
@@ -290,14 +530,14 @@ export default function LoginPage() {
         </Text>
         <Space direction="vertical" size={8} style={{ width: '100%', marginBottom: 16 }}>
           <CredBadge label={t('login.username')} value="superhero" />
-          <CredBadge label={t('login.password')} value="test123" />
+          <CredBadge label={t('login.password')} value="superhero" />
         </Space>
         <Alert type="warning" showIcon message={t('login.changePassword')} style={{ marginBottom: 20 }} />
         <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
           <Button onClick={() => setCreatedModalOpen(false)}>{t('login.dismiss')}</Button>
           <Button type="primary" onClick={() => {
             setCreatedModalOpen(false)
-            fillAccount({ username: 'superhero', password: 'test123' })
+            loginWithCredentials('superhero', 'superhero')
           }}>
             {t('login.fillAndSignIn')}
           </Button>

@@ -23,7 +23,12 @@
     "admin": "Admin",
     "dashboard": "Dashboard",
     "signOut": "Sign out",
-    "language": "Language"
+    "language": "Language",
+    "locations": "Locations",
+    "entrances": "Entrances",
+    "supervisorAdmin": "Supervisor Assignments",
+    "myPerformance": "My Performance",
+    "whyUs": "Why Us — Our Vision"
   },
   "roles": {
     "INVITER": "Inviter",
@@ -37,7 +42,11 @@
     "securityReview": "Security Review",
     "gateEntry": "Gate Entry",
     "administration": "Administration",
-    "visitorManagement": "Visitor Management"
+    "visitorManagement": "Visitor Management",
+    "locations": "Locations",
+    "entrances": "Entrances",
+    "supervisorAdmin": "Supervisor Assignments",
+    "myPerformance": "My Performance"
   },
   "login": {
     "title": "Visitor Management",
@@ -279,5 +288,71 @@
     "de": "Deutsch",
     "zh": "中文",
     "ru": "Русский"
+  },
+  "session": {
+    "timeLeft": "Time left to logout:"
+  },
+  "roleAdoption": {
+    "subtitle": "What became possible that wasn't before:",
+    "inviter": {
+      "link": "VisMan for Inviters",
+      "title": "VisMan for Inviters",
+      "i1": "Invite multiple visitors at once — one form, no email chains, no phone calls",
+      "i2": "Track every invitation in real time, from submission all the way to gate check-in",
+      "i3": "Answer security questions instantly, from anywhere, on any device",
+      "i4": "Your full invitation history — searchable, month by month — always at your fingertips",
+      "i5": "If you're unavailable, your supervisor steps in directly — nothing ever gets stuck",
+      "mobile": "VisMan works in your browser on any device. No installation, no IT ticket, no waiting."
+    },
+    "security": {
+      "link": "VisMan for Security",
+      "title": "VisMan for Security",
+      "i1": "Review and decide visitor requests from your smartphone — the mobile app works anywhere",
+      "i2": "Every visitor comes with a reliability score built from real historical data",
+      "i3": "Ask the inviter a clarification question in-system — tracked, logged, no email needed",
+      "i4": "Refuse or blacklist in one click — the block applies across all future visits automatically",
+      "i5": "Every decision is logged with a timestamp — no manual registers, no handover notes",
+      "mobile": "Install the VisMan Security app on any smartphone. Review tasks in the field, away from your desk, without VPN."
+    },
+    "gatekeeper": {
+      "link": "VisMan for Gatekeepers",
+      "title": "VisMan for Gatekeepers",
+      "i1": "See every expected visitor before they arrive — no surprises, no paper lists",
+      "i2": "Check in visitors from your phone, even without internet — the app works fully offline",
+      "i3": "GPS-stamped check-ins record exactly where and when — automatic, zero paperwork",
+      "i4": "Your weekly schedule organised by day, updated live, always on your screen",
+      "i5": "Your performance — streaks, on-time rate, ranking — tracked automatically and shown to you",
+      "mobile": "Install the VisMan Gatekeeper app on your phone like a native app. No company laptop needed at the gate."
+    }
+  },
+  "whyUs": {
+    "heroSuper": "Visitor Management — Reimagined",
+    "heroTitle": "Why Us — Our Vision",
+    "heroText": "The future of secure, human-centred facility access is not a sign-in book. It is a living workflow — one that respects your people, protects your premises, and gives every team member the right tool for their role.",
+    "problemTitle": "The Problem Nobody Talks About",
+    "problemText": "Every day, thousands of employees spend minutes — sometimes hours — chasing approvals for visitors over email, phone, and shared spreadsheets. Security officers make decisions without context. Gatekeepers turn away or wave through people they cannot verify. Compliance teams scramble when an auditor asks who was in the building last Tuesday. The cost is not just friction — it is risk.",
+    "solutionTitle": "Our Answer",
+    "solutionText1": "We built a system where every role has exactly the interface it needs, connected by a transparent, auditable BPMN workflow. The inviter fills one form. Security gets the full context, history, and a reliability score. The gatekeeper sees today's expected arrivals on a clean mobile screen. The admin sees everything, in real time, across every location.",
+    "solutionText2": "No emails. No spreadsheets. No guesswork. Just a calm, structured process — built to make your team's working day better.",
+    "diffTitle": "What Sets Us Apart",
+    "f1title": "Zero Vendor Lock-in",
+    "f1desc": "Open-source Operaton BPM engine. Your data stays on your infrastructure, always.",
+    "f2title": "Visual, Adaptable Workflows",
+    "f2desc": "BPMN processes your team can read, modify, and evolve — no code required.",
+    "f3title": "Role-First Design",
+    "f3desc": "Three purpose-built apps — desktop, mobile PWA, gatekeeper PWA — each crafted for one job.",
+    "f4title": "Built-in Compliance",
+    "f4desc": "Every action timestamped and stored. Full audit trail, always ready, zero extra effort.",
+    "f5title": "Global by Default",
+    "f5desc": "Six languages built in. Multi-site support with independent entrance rosters and supervisor hierarchies.",
+    "f6title": "Works Everywhere",
+    "f6desc": "Offline-first gatekeeper app syncs GPS-stamped check-ins the moment connectivity returns.",
+    "statsLocations": "Global Locations",
+    "statsRoles": "Coordinated Roles",
+    "statsCheckins": "Annual Check-Ins",
+    "statsAudit": "Audit Coverage",
+    "ctaTitle": "The Next Step",
+    "ctaText": "This system is not a prototype — it is a fully running proof of concept, loaded with six global offices, 214 users, and a year of simulated activity. Every feature you see is live, testable, and ready to be evaluated against your real requirements.",
+    "ctaQuote": "\"We did not set out to build a visitor form. We set out to give every person who walks through your doors — and every person who invited them — an experience worth remembering.\""
   }
 }
