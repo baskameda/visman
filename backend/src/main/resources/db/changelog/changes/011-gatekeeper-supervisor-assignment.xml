@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Flat two-level supervisor hierarchy for Gatekeeper (Porter) officers (max 10 per supervisor) -->
+    <changeSet id="011-1" author="poc">
+        <createTable tableName="poc_gatekeeper_supervisor_assignment">
+            <column name="porter_username"     type="VARCHAR(100)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="supervisor_username" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="poc_gatekeeper_supervisor_assignment" indexName="idx_gk_supervisor_username">
+            <column name="supervisor_username"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

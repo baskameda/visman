@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="36" fill="#531dab"/>
+  <!-- barrier post left -->
+  <rect x="28" y="60" width="14" height="80" rx="4" fill="white" opacity="0.9"/>
+  <!-- barrier post right -->
+  <rect x="150" y="60" width="14" height="80" rx="4" fill="white" opacity="0.9"/>
+  <!-- barrier arm (horizontal, raised 45deg pivot) -->
+  <rect x="42" y="72" width="90" height="14" rx="7" fill="white"/>
+  <!-- stripe on arm -->
+  <rect x="62" y="72" width="14" height="14" rx="3" fill="#531dab" opacity="0.6"/>
+  <rect x="96" y="72" width="14" height="14" rx="3" fill="#531dab" opacity="0.6"/>
+  <!-- checkmark under arm -->
+  <polyline points="74,118 88,132 118,102" fill="none" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

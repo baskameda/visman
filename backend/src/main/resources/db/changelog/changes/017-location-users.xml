@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Per-location users and role assignments for the 5 new city offices.
+
+        User ranges:
+          Paris:       inviter12–21  | gatekeeper22–41  | security7–11
+          Rome:        inviter22–31  | gatekeeper42–61  | security12–16
+          London:      inviter32–41  | gatekeeper62–81  | security17–21
+          Beijing:     inviter42–51  | gatekeeper82–101 | security22–26
+          Los Angeles: inviter52–61  | gatekeeper102–121| security27–31
+
+        Also creates poc_user_location_assignment and populates it for all
+        6 locations (including the existing Commanders Desk users).
+    -->
+
+    <!-- ── 017-1 : poc_user_location_assignment table ───────────────────────── -->
+    <changeSet id="017-1" author="seed">
+        <createTable tableName="poc_user_location_assignment">
+            <column name="username"    type="VARCHAR(100)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="location_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="poc_user_location_assignment" indexName="idx_ula_location_id">
+            <column name="location_id"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- ── 017-2 : Create 175 new users (10 inviters + 20 gatekeepers + 5 security × 5 locations) -->
+    <changeSet id="017-2" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+-- Name pools (25 first × 20 last)
+DECLARE @fn TABLE (n INT, v NVARCHAR(50));
+DECLARE @ln TABLE (n INT, v NVARCHAR(50));
+
+INSERT INTO @fn VALUES
+ (1,'James'),(2,'Emma'),(3,'Liam'),(4,'Olivia'),(5,'Noah'),
+ (6,'Ava'),(7,'William'),(8,'Isabella'),(9,'Oliver'),(10,'Sophia'),
+ (11,'Benjamin'),(12,'Mia'),(13,'Elijah'),(14,'Charlotte'),(15,'Lucas'),
+ (16,'Amelia'),(17,'Mason'),(18,'Harper'),(19,'Ethan'),(20,'Evelyn'),
+ (21,'Alexander'),(22,'Abigail'),(23,'Henry'),(24,'Emily'),(25,'Michael');
+
+INSERT INTO @ln VALUES
+ (1,'Smith'),(2,'Johnson'),(3,'Williams'),(4,'Brown'),(5,'Jones'),
+ (6,'Garcia'),(7,'Martinez'),(8,'Davis'),(9,'Miller'),(10,'Wilson'),
+ (11,'Moore'),(12,'Taylor'),(13,'Anderson'),(14,'Thomas'),(15,'Jackson'),
+ (16,'White'),(17,'Harris'),(18,'Martin'),(19,'Thompson'),(20,'Young');
+
+DECLARE @i      INT;
+DECLARE @uname  VARCHAR(50);
+DECLARE @fname  NVARCHAR(50);
+DECLARE @lname  NVARCHAR(50);
+DECLARE @pwd    VARCHAR(40);
+DECLARE @email  VARCHAR(200);
+
+-- ── Inviters 12 – 61 ──────────────────────────────────────────────────────────
+SET @i = 12;
+WHILE @i <= 61
+BEGIN
+    SET @uname = 'inviter' + CAST(@i AS VARCHAR(5));
+    SET @fname = (SELECT v FROM @fn WHERE n = ((@i - 12) % 25) + 1);
+    SET @lname = (SELECT v FROM @ln WHERE n = ((@i - 12) / 25) % 20 + 1);
+    SET @pwd   = LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', @uname + '123'), 2));
+    SET @email = @uname + '@example.com';
+
+    IF NOT EXISTS (SELECT 1 FROM ACT_ID_USER WHERE ID_ = @uname)
+        INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+        VALUES (@uname, 1, @fname, @lname, @email, @pwd, NULL, NULL, NULL, NULL);
+
+    IF NOT EXISTS (SELECT 1 FROM ACT_ID_MEMBERSHIP WHERE USER_ID_ = @uname AND GROUP_ID_ = 'Invitors')
+        INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES (@uname, 'Invitors');
+
+    SET @i = @i + 1;
+END
+
+-- ── Gatekeepers 22 – 121 ──────────────────────────────────────────────────────
+SET @i = 22;
+WHILE @i <= 121
+BEGIN
+    SET @uname = 'gatekeeper' + CAST(@i AS VARCHAR(5));
+    SET @fname = (SELECT v FROM @fn WHERE n = ((@i - 22) % 25) + 1);
+    SET @lname = (SELECT v FROM @ln WHERE n = ((@i - 22) / 25) % 20 + 1);
+    SET @pwd   = LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', @uname + '123'), 2));
+    SET @email = @uname + '@example.com';
+
+    IF NOT EXISTS (SELECT 1 FROM ACT_ID_USER WHERE ID_ = @uname)
+        INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+        VALUES (@uname, 1, @fname, @lname, @email, @pwd, NULL, NULL, NULL, NULL);
+
+    IF NOT EXISTS (SELECT 1 FROM ACT_ID_MEMBERSHIP WHERE USER_ID_ = @uname AND GROUP_ID_ = 'Porters')
+        INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES (@uname, 'Porters');
+
+    SET @i = @i + 1;
+END
+
+-- ── Security 7 – 31 ───────────────────────────────────────────────────────────
+SET @i = 7;
+WHILE @i <= 31
+BEGIN
+    SET @uname = 'security' + CAST(@i AS VARCHAR(5));
+    SET @fname = (SELECT v FROM @fn WHERE n = ((@i - 7) % 25) + 1);
+    SET @lname = (SELECT v FROM @ln WHERE n = ((@i - 7) / 25) % 20 + 1);
+    SET @pwd   = LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', @uname + '123'), 2));
+    SET @email = @uname + '@example.com';
+
+    IF NOT EXISTS (SELECT 1 FROM ACT_ID_USER WHERE ID_ = @uname)
+        INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+        VALUES (@uname, 1, @fname, @lname, @email, @pwd, NULL, NULL, NULL, NULL);
+
+    IF NOT EXISTS (SELECT 1 FROM ACT_ID_MEMBERSHIP WHERE USER_ID_ = @uname AND GROUP_ID_ = 'Security')
+        INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES (@uname, 'Security');
+
+    SET @i = @i + 1;
+END
+        ]]></sql>
+    </changeSet>
+
+    <!-- ── 017-3 : Assign 2 gatekeepers per entrance for each new location ───── -->
+    <changeSet id="017-3" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+-- Entrance names in the order they were inserted (same for all locations)
+CREATE TABLE #enames (rn INT IDENTITY(1,1), ename VARCHAR(100));
+INSERT INTO #enames (ename) VALUES
+    ('Main Entrance'), ('North Gate'), ('South Gate'),
+    ('East Wing Lobby'), ('West Wing Lobby'),
+    ('Loading Dock Alpha'), ('Loading Dock Bravo'),
+    ('Executive Floor'), ('Server Room Corridor'), ('Staff Canteen');
+
+DECLARE @loc_id    BIGINT;
+DECLARE @loc_name  VARCHAR(100);
+DECLARE @gk_start  INT;
+DECLARE @ent_rn    INT;
+DECLARE @ent_id    BIGINT;
+DECLARE @ename     VARCHAR(100);
+DECLARE @gk1_name  VARCHAR(50);
+DECLARE @gk2_name  VARCHAR(50);
+
+DECLARE @loc_cfg TABLE (loc_name VARCHAR(100), gk_start INT);
+INSERT INTO @loc_cfg VALUES
+    ('Paris',        22),
+    ('Rome',         42),
+    ('London',       62),
+    ('Beijing',      82),
+    ('Los Angeles', 102);
+
+DECLARE locs CURSOR FOR SELECT loc_name, gk_start FROM @loc_cfg;
+OPEN locs;
+FETCH NEXT FROM locs INTO @loc_name, @gk_start;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @loc_id = (SELECT TOP 1 id FROM poc_location WHERE name = @loc_name);
+    SET @ent_rn = 1;
+
+    WHILE @ent_rn <= 10
+    BEGIN
+        SET @ename    = (SELECT ename FROM #enames WHERE rn = @ent_rn);
+        SET @ent_id   = (SELECT e.id FROM poc_entrance e
+                         WHERE  e.entrance_name = @ename AND e.location_id = @loc_id);
+        SET @gk1_name = 'gatekeeper' + CAST(@gk_start + (@ent_rn - 1) * 2       AS VARCHAR(5));
+        SET @gk2_name = 'gatekeeper' + CAST(@gk_start + (@ent_rn - 1) * 2 + 1   AS VARCHAR(5));
+
+        IF @ent_id IS NOT NULL
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM poc_entrance_gatekeeper
+                           WHERE entrance_id = @ent_id AND gatekeeper_username = @gk1_name)
+                INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+                VALUES (@ent_id, @gk1_name);
+
+            IF NOT EXISTS (SELECT 1 FROM poc_entrance_gatekeeper
+                           WHERE entrance_id = @ent_id AND gatekeeper_username = @gk2_name)
+                INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+                VALUES (@ent_id, @gk2_name);
+        END
+
+        SET @ent_rn = @ent_rn + 1;
+    END
+
+    FETCH NEXT FROM locs INTO @loc_name, @gk_start;
+END
+
+CLOSE locs;
+DEALLOCATE locs;
+DROP TABLE #enames;
+        ]]></sql>
+    </changeSet>
+
+    <!-- ── 017-4 : User-location assignments for all 6 locations ─────────────── -->
+    <changeSet id="017-4" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+DELETE FROM poc_user_location_assignment;
+
+DECLARE @loc_id   BIGINT;
+DECLARE @i        INT;
+DECLARE @uname    VARCHAR(50);
+
+DECLARE @loc_cfg TABLE (
+    loc_name    VARCHAR(100),
+    inv_start   INT, inv_end   INT,
+    gk_start    INT, gk_end    INT,
+    sec_start   INT, sec_end   INT
+);
+INSERT INTO @loc_cfg VALUES
+    ('Commanders Desk',  1,  11,  1,  21, 1,  6),
+    ('Paris',           12,  21, 22,  41, 7, 11),
+    ('Rome',            22,  31, 42,  61,12, 16),
+    ('London',          32,  41, 62,  81,17, 21),
+    ('Beijing',         42,  51, 82, 101,22, 26),
+    ('Los Angeles',     52,  61,102, 121,27, 31);
+
+DECLARE locs CURSOR FOR
+    SELECT c.loc_name, c.inv_start, c.inv_end, c.gk_start, c.gk_end, c.sec_start, c.sec_end,
+           l.id
+    FROM   @loc_cfg c
+    JOIN   poc_location l ON l.name = c.loc_name;
+
+DECLARE @inv_start INT, @inv_end INT, @gk_start INT, @gk_end INT, @sec_start INT, @sec_end INT, @loc_name VARCHAR(100);
+
+OPEN locs;
+FETCH NEXT FROM locs INTO @loc_name, @inv_start, @inv_end, @gk_start, @gk_end, @sec_start, @sec_end, @loc_id;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    -- Inviters
+    SET @i = @inv_start;
+    WHILE @i <= @inv_end
+    BEGIN
+        SET @uname = 'inviter' + CAST(@i AS VARCHAR(5));
+        IF NOT EXISTS (SELECT 1 FROM poc_user_location_assignment WHERE username = @uname)
+            INSERT INTO poc_user_location_assignment (username, location_id) VALUES (@uname, @loc_id);
+        SET @i = @i + 1;
+    END
+
+    -- Gatekeepers
+    SET @i = @gk_start;
+    WHILE @i <= @gk_end
+    BEGIN
+        SET @uname = 'gatekeeper' + CAST(@i AS VARCHAR(5));
+        IF NOT EXISTS (SELECT 1 FROM poc_user_location_assignment WHERE username = @uname)
+            INSERT INTO poc_user_location_assignment (username, location_id) VALUES (@uname, @loc_id);
+        SET @i = @i + 1;
+    END
+
+    -- Security
+    SET @i = @sec_start;
+    WHILE @i <= @sec_end
+    BEGIN
+        SET @uname = 'security' + CAST(@i AS VARCHAR(5));
+        IF NOT EXISTS (SELECT 1 FROM poc_user_location_assignment WHERE username = @uname)
+            INSERT INTO poc_user_location_assignment (username, location_id) VALUES (@uname, @loc_id);
+        SET @i = @i + 1;
+    END
+
+    FETCH NEXT FROM locs INTO @loc_name, @inv_start, @inv_end, @gk_start, @gk_end, @sec_start, @sec_end, @loc_id;
+END
+
+CLOSE locs;
+DEALLOCATE locs;
+        ]]></sql>
+    </changeSet>
+
+</databaseChangeLog>

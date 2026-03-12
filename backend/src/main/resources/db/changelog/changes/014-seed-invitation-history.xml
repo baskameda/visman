@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        One year of synthetic invitation history for Commanders Desk.
+
+        Volume (approx):
+          ~261 working days x avg 10 invitations  = ~2 610 invitations
+          avg 3 visitors / invitation              = ~7 830 security checks
+          93 % approved                            = ~7 282 visits (all CHECKED_IN)
+           5 % refused (no blacklist)              = ~  392 refused security checks
+           2 % blacklisted                         = ~  157 blacklisted visitors
+
+        Randomness:
+          - ABS(CHECKSUM(NEWID())) % N  for integers (re-seeded each call)
+          - SCOPE_IDENTITY() to chain IDs across tables
+          - process_instance_id = NEWID() as VARCHAR(36) — synthetic, no real BPMN process
+
+        Requires changesets 012 (poc_location) and 013 (entrances + users) to have run first.
+    -->
+
+    <changeSet id="014-1" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+-- ============================================================
+-- TEMP TABLES
+-- ============================================================
+CREATE TABLE #fn  (n INT PRIMARY KEY, v NVARCHAR(50));
+CREATE TABLE #ln  (n INT PRIMARY KEY, v NVARCHAR(50));
+CREATE TABLE #co  (n INT PRIMARY KEY, v VARCHAR(255));
+CREATE TABLE #fu  (n INT PRIMARY KEY, v VARCHAR(100));
+CREATE TABLE #vpool  (rn INT IDENTITY(1,1) PRIMARY KEY, id BIGINT NOT NULL);
+CREATE TABLE #epool  (rn INT IDENTITY(1,1) PRIMARY KEY, id BIGINT NOT NULL);
+CREATE TABLE #egpool (entrance_id BIGINT PRIMARY KEY,
+                      gk1 VARCHAR(100) NOT NULL,
+                      gk2 VARCHAR(100) NOT NULL);
+CREATE TABLE #ipool  (rn INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(50) NOT NULL);
+CREATE TABLE #spool  (rn INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(50) NOT NULL);
+
+-- ============================================================
+-- NAME POOLS  (25 first names x 20 last names = 500 combos)
+-- ============================================================
+INSERT INTO #fn (n, v) VALUES
+ (1,'James'),(2,'Emma'),(3,'Liam'),(4,'Olivia'),(5,'Noah'),
+ (6,'Ava'),(7,'William'),(8,'Isabella'),(9,'Oliver'),(10,'Sophia'),
+ (11,'Benjamin'),(12,'Mia'),(13,'Elijah'),(14,'Charlotte'),(15,'Lucas'),
+ (16,'Amelia'),(17,'Mason'),(18,'Harper'),(19,'Ethan'),(20,'Evelyn'),
+ (21,'Alexander'),(22,'Abigail'),(23,'Henry'),(24,'Emily'),(25,'Michael');
+
+INSERT INTO #ln (n, v) VALUES
+ (1,'Smith'),(2,'Johnson'),(3,'Williams'),(4,'Brown'),(5,'Jones'),
+ (6,'Garcia'),(7,'Martinez'),(8,'Davis'),(9,'Miller'),(10,'Wilson'),
+ (11,'Moore'),(12,'Taylor'),(13,'Anderson'),(14,'Thomas'),(15,'Jackson'),
+ (16,'White'),(17,'Harris'),(18,'Martin'),(19,'Thompson'),(20,'Young');
+
+INSERT INTO #co (n, v) VALUES
+ (1,'Acme Corporation'),(2,'TechVentures GmbH'),(3,'Global Solutions Ltd'),
+ (4,'Innovatech SA'),(5,'PrimeSoft AG'),(6,'NexGen Industries'),
+ (7,'Aurora Consulting'),(8,'DataBridge Inc'),(9,'Velocity Partners'),
+ (10,'Helix Systems');
+
+INSERT INTO #fu (n, v) VALUES
+ (1,'Account Manager'),(2,'Software Engineer'),(3,'Project Lead'),
+ (4,'Business Analyst'),(5,'IT Consultant'),(6,'Operations Director'),
+ (7,'Sales Executive'),(8,'Product Manager');
+
+-- ============================================================
+-- CREATE 500 VISITORS
+-- ============================================================
+DECLARE @vi          INT          = 1;
+DECLARE @fn_val      NVARCHAR(50);
+DECLARE @ln_val      NVARCHAR(50);
+DECLARE @co_val      VARCHAR(255);
+DECLARE @fu_val      VARCHAR(100);
+DECLARE @vis_creator VARCHAR(20);
+
+WHILE @vi <= 500
+BEGIN
+    SET @fn_val      = (SELECT v FROM #fn WHERE n = ((@vi - 1) % 25) + 1);
+    SET @ln_val      = (SELECT v FROM #ln WHERE n = ((@vi - 1) / 25) + 1);
+    SET @co_val      = (SELECT v FROM #co WHERE n = (ABS(CHECKSUM(NEWID())) % 10) + 1);
+    SET @fu_val      = (SELECT v FROM #fu WHERE n = (ABS(CHECKSUM(NEWID())) %  8) + 1);
+    SET @vis_creator = 'inviter' + CAST(((@vi - 1) % 11) + 1 AS VARCHAR(5));
+
+    INSERT INTO poc_visitor
+        (first_name, last_name, company, visitor_function,
+         email, blacklisted, created_by, created_at)
+    VALUES
+        (@fn_val, @ln_val, @co_val, @fu_val,
+         LOWER(@fn_val) + '.' + LOWER(@ln_val) + '@example.com',
+         0, @vis_creator,
+         DATEADD(day, -366, CAST(GETDATE() AS DATE)));
+
+    INSERT INTO #vpool (id) VALUES (SCOPE_IDENTITY());
+    SET @vi = @vi + 1;
+END
+
+-- ============================================================
+-- LOAD ENTRANCE POOL (10 entrances at Commanders Desk)
+-- ============================================================
+INSERT INTO #epool (id)
+SELECT e.id
+FROM   poc_entrance  e
+JOIN   poc_location  l ON l.id = e.location_id
+WHERE  l.name = 'Commanders Desk'
+ORDER  BY e.id;
+
+DECLARE @entrance_count INT = (SELECT COUNT(*) FROM #epool);
+
+-- ============================================================
+-- GATEKEEPER MAPPING  (2 per entrance, alphabetical order)
+-- ============================================================
+INSERT INTO #egpool (entrance_id, gk1, gk2)
+SELECT
+    a.entrance_id,
+    a.gatekeeper_username                          AS gk1,
+    ISNULL(b.gatekeeper_username, a.gatekeeper_username) AS gk2
+FROM (
+    SELECT entrance_id, gatekeeper_username,
+           ROW_NUMBER() OVER (PARTITION BY entrance_id ORDER BY gatekeeper_username) AS rn
+    FROM   poc_entrance_gatekeeper
+    WHERE  entrance_id IN (SELECT id FROM #epool)
+) a
+LEFT JOIN (
+    SELECT entrance_id, gatekeeper_username,
+           ROW_NUMBER() OVER (PARTITION BY entrance_id ORDER BY gatekeeper_username) AS rn
+    FROM   poc_entrance_gatekeeper
+    WHERE  entrance_id IN (SELECT id FROM #epool)
+) b ON a.entrance_id = b.entrance_id AND b.rn = 2
+WHERE a.rn = 1;
+
+-- ============================================================
+-- INVITER AND SECURITY POOLS
+-- ============================================================
+INSERT INTO #ipool (username) VALUES
+ ('inviter1'),('inviter2'),('inviter3'),('inviter4'),('inviter5'),
+ ('inviter6'),('inviter7'),('inviter8'),('inviter9'),('inviter10'),('inviter11');
+
+DECLARE @inviter_count INT = 11;
+
+INSERT INTO #spool (username) VALUES
+ ('security1'),('security2'),('security3'),('security4'),('security5'),('security6');
+
+DECLARE @security_count INT = 6;
+
+-- ============================================================
+-- DECLARE ALL LOOP VARIABLES UP FRONT
+-- ============================================================
+DECLARE @day            DATE;
+DECLARE @today          DATE;
+DECLARE @inv_today      INT;
+DECLARE @i              INT;
+DECLARE @inv_username   VARCHAR(50);
+DECLARE @ent_rn         INT;
+DECLARE @ent_id         BIGINT;
+DECLARE @n_visitors     INT;
+DECLARE @inv_company    VARCHAR(255);
+DECLARE @inv_id         BIGINT;
+DECLARE @created_at_inv DATETIME;
+DECLARE @vi2            INT;
+DECLARE @vpool_rn       INT;
+DECLARE @vis_id         BIGINT;
+DECLARE @sec_roll       INT;
+DECLARE @sec_status     VARCHAR(20);
+DECLARE @sec_note       VARCHAR(2000);
+DECLARE @sec_officer    VARCHAR(50);
+DECLARE @reliability    INT;
+DECLARE @decided_at     DATETIME;
+DECLARE @sc_id          BIGINT;
+DECLARE @gk1            VARCHAR(100);
+DECLARE @gk2            VARCHAR(100);
+DECLARE @gk_pick        VARCHAR(100);
+DECLARE @checkin_min    INT;
+DECLARE @checkin_at     DATETIME;
+
+SET @day   = DATEADD(day, -365, CAST(GETDATE() AS DATE));
+SET @today = CAST(GETDATE() AS DATE);
+
+-- ============================================================
+-- MAIN DATE LOOP  (working days only)
+-- ============================================================
+WHILE @day < @today
+BEGIN
+    IF DATENAME(WEEKDAY, @day) NOT IN ('Saturday', 'Sunday')
+    BEGIN
+        -- 8 – 12 invitations today  (10 ± 20 %)
+        SET @inv_today = 8 + ABS(CHECKSUM(NEWID())) % 5;
+        SET @i = 1;
+
+        WHILE @i <= @inv_today
+        BEGIN
+            -- ── Random inviter ────────────────────────────────────────────
+            SET @inv_username = (
+                SELECT username FROM #ipool
+                WHERE  rn = (ABS(CHECKSUM(NEWID())) % @inviter_count) + 1);
+
+            -- ── Random entrance (uniform → natural ~±7 % over ~2 600 inv) ─
+            SET @ent_rn = (ABS(CHECKSUM(NEWID())) % @entrance_count) + 1;
+            SET @ent_id = (SELECT id FROM #epool WHERE rn = @ent_rn);
+
+            -- ── 1 – 5 visitors ────────────────────────────────────────────
+            SET @n_visitors     = 1 + ABS(CHECKSUM(NEWID())) % 5;
+            SET @inv_company    = (SELECT v FROM #co WHERE n = (ABS(CHECKSUM(NEWID())) % 10) + 1);
+            SET @created_at_inv = DATEADD(minute,
+                                          ABS(CHECKSUM(NEWID())) % 480,
+                                          CAST(@day AS DATETIME));
+
+            INSERT INTO poc_invitation
+                (inviter_username, start_date, end_date, entrance_id,
+                 company, description, process_instance_id, created_at)
+            VALUES
+                (@inv_username, @day, @day, @ent_id,
+                 @inv_company,
+                 'MOCK DATA: Scheduled business visit arranged by ' + @inv_username + '.',
+                 CAST(NEWID() AS VARCHAR(36)),
+                 @created_at_inv);
+
+            SET @inv_id = SCOPE_IDENTITY();
+            SET @vi2    = 1;
+
+            -- ── Per-visitor loop ──────────────────────────────────────────
+            WHILE @vi2 <= @n_visitors
+            BEGIN
+                SET @vpool_rn = (ABS(CHECKSUM(NEWID())) % 500) + 1;
+                SET @vis_id   = (SELECT id FROM #vpool WHERE rn = @vpool_rn);
+
+                -- Skip duplicate visitor within same invitation
+                IF NOT EXISTS (
+                    SELECT 1 FROM poc_invitation_visitor
+                    WHERE  invitation_id = @inv_id AND visitor_id = @vis_id)
+                BEGIN
+                    INSERT INTO poc_invitation_visitor (invitation_id, visitor_id)
+                    VALUES (@inv_id, @vis_id);
+
+                    -- Security decision:
+                    --   0 – 1  → BLACKLISTED  (2 %)
+                    --   2 – 6  → REFUSED      (5 %)
+                    --   7 – 99 → APPROVED     (93 %)
+                    SET @sec_roll = ABS(CHECKSUM(NEWID())) % 100;
+
+                    IF @sec_roll <= 1
+                    BEGIN
+                        SET @sec_status = 'BLACKLISTED';
+                        SET @sec_note   = 'MOCK DATA: Visitor flagged for security policy violation. Access permanently revoked per protocol.';
+                        UPDATE poc_visitor SET blacklisted = 1 WHERE id = @vis_id;
+                    END
+                    ELSE IF @sec_roll <= 6
+                    BEGIN
+                        SET @sec_status = 'REFUSED';
+                        SET @sec_note   = 'MOCK DATA: Visitor did not pass background verification. Access denied for this visit.';
+                    END
+                    ELSE
+                    BEGIN
+                        SET @sec_status = 'APPROVED';
+                        SET @sec_note   = NULL;
+                    END
+
+                    SET @sec_officer = (
+                        SELECT username FROM #spool
+                        WHERE  rn = (ABS(CHECKSUM(NEWID())) % @security_count) + 1);
+
+                    -- Reliability 70 – 100
+                    SET @reliability = 70 + ABS(CHECKSUM(NEWID())) % 31;
+
+                    -- decided_at: 1 – 6 hours after start of business
+                    SET @decided_at = DATEADD(hour,
+                                              1 + ABS(CHECKSUM(NEWID())) % 6,
+                                              CAST(@day AS DATETIME));
+
+                    INSERT INTO poc_security_check
+                        (invitation_id, visitor_id, status, reliability,
+                         security_note, assigned_to, clarification_count, decided_at)
+                    VALUES
+                        (@inv_id, @vis_id, @sec_status, @reliability,
+                         @sec_note, @sec_officer, 0, @decided_at);
+
+                    SET @sc_id = SCOPE_IDENTITY();
+
+                    -- ── Create visit only for APPROVED checks ─────────────
+                    IF @sec_status = 'APPROVED'
+                    BEGIN
+                        SELECT @gk1 = gk1, @gk2 = gk2
+                        FROM   #egpool
+                        WHERE  entrance_id = @ent_id;
+
+                        -- Pick one of the 2 assigned gatekeepers (±7 % variation arises naturally)
+                        IF ABS(CHECKSUM(NEWID())) % 2 = 0
+                            SET @gk_pick = @gk1;
+                        ELSE
+                            SET @gk_pick = @gk2;
+
+                        -- Check-in time: 08:00 – 17:00  (480 – 1 019 minutes from midnight)
+                        SET @checkin_min = 480 + ABS(CHECKSUM(NEWID())) % 540;
+                        SET @checkin_at  = DATEADD(minute, @checkin_min, CAST(@day AS DATETIME));
+
+                        INSERT INTO poc_visit
+                            (security_check_id, visitor_id, invitation_id,
+                             visit_date, entrance_id, status, checked_in_at, checked_in_by)
+                        VALUES
+                            (@sc_id, @vis_id, @inv_id,
+                             @day, @ent_id, 'CHECKED_IN', @checkin_at, @gk_pick);
+                    END
+                END
+
+                SET @vi2 = @vi2 + 1;
+            END  -- visitor loop
+
+            SET @i = @i + 1;
+        END  -- invitation loop
+    END  -- weekday guard
+
+    SET @day = DATEADD(day, 1, @day);
+END  -- date loop
+
+-- ============================================================
+-- CLEANUP
+-- ============================================================
+DROP TABLE #fn;
+DROP TABLE #ln;
+DROP TABLE #co;
+DROP TABLE #fu;
+DROP TABLE #vpool;
+DROP TABLE #epool;
+DROP TABLE #egpool;
+DROP TABLE #ipool;
+DROP TABLE #spool;
+        ]]></sql>
+    </changeSet>
+
+</databaseChangeLog>

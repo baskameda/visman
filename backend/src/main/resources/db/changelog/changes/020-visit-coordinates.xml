@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Add GPS coordinates to poc_visit for mobile gatekeeper check-ins -->
+    <changeSet id="020-visit-coordinates" author="claude">
+        <addColumn tableName="poc_visit">
+            <column name="checkin_lat" type="DECIMAL(15,10)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="checkin_lng" type="DECIMAL(15,10)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

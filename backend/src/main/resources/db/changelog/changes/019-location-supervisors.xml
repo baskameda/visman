@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Supervisor assignments for the 5 new city locations.
+        Strategy: for each location, shuffle that location's users,
+        pick the first as supervisor, assign up to 10 of the rest.
+        Uses the same pattern as changeset 015 but scoped per location.
+    -->
+
+    <!-- ── 019-1 : Inviter supervisors for new locations ─────────────────────── -->
+    <changeSet id="019-1" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+DECLARE @loc_cfg TABLE (inv_start INT, inv_end INT);
+INSERT INTO @loc_cfg VALUES (12,21),(22,31),(32,41),(42,51),(52,61);
+
+DECLARE @inv_start INT, @inv_end INT, @sup VARCHAR(100);
+DECLARE @pool_i INT;
+
+DECLARE locs CURSOR FOR SELECT inv_start, inv_end FROM @loc_cfg;
+OPEN locs;
+FETCH NEXT FROM locs INTO @inv_start, @inv_end;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    CREATE TABLE #inv (rn INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(100));
+
+    INSERT INTO #inv (username)
+    SELECT u.ID_
+    FROM   ACT_ID_USER u
+    JOIN   ACT_ID_MEMBERSHIP m ON m.USER_ID_ = u.ID_
+    WHERE  m.GROUP_ID_ = 'Invitors'
+      AND  TRY_CAST(SUBSTRING(u.ID_, 8, 10) AS INT) BETWEEN @inv_start AND @inv_end
+    ORDER  BY NEWID();
+
+    SELECT TOP 1 @sup = username FROM #inv ORDER BY rn;
+
+    DELETE FROM poc_supervisor_assignment
+    WHERE inviter_username IN (SELECT username FROM #inv);
+
+    INSERT INTO poc_supervisor_assignment (inviter_username, supervisor_username)
+    SELECT TOP 10 username, @sup FROM #inv WHERE username <> @sup ORDER BY rn;
+
+    DROP TABLE #inv;
+    FETCH NEXT FROM locs INTO @inv_start, @inv_end;
+END
+
+CLOSE locs; DEALLOCATE locs;
+        ]]></sql>
+    </changeSet>
+
+    <!-- ── 019-2 : Security supervisors for new locations ────────────────────── -->
+    <changeSet id="019-2" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+DECLARE @loc_cfg TABLE (sec_start INT, sec_end INT);
+INSERT INTO @loc_cfg VALUES (7,11),(12,16),(17,21),(22,26),(27,31);
+
+DECLARE @sec_start INT, @sec_end INT, @sup VARCHAR(100);
+
+DECLARE locs CURSOR FOR SELECT sec_start, sec_end FROM @loc_cfg;
+OPEN locs;
+FETCH NEXT FROM locs INTO @sec_start, @sec_end;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    CREATE TABLE #sec (rn INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(100));
+
+    INSERT INTO #sec (username)
+    SELECT u.ID_
+    FROM   ACT_ID_USER u
+    JOIN   ACT_ID_MEMBERSHIP m ON m.USER_ID_ = u.ID_
+    WHERE  m.GROUP_ID_ = 'Security'
+      AND  TRY_CAST(SUBSTRING(u.ID_, 9, 10) AS INT) BETWEEN @sec_start AND @sec_end
+    ORDER  BY NEWID();
+
+    SELECT TOP 1 @sup = username FROM #sec ORDER BY rn;
+
+    DELETE FROM poc_security_supervisor_assignment
+    WHERE officer_username IN (SELECT username FROM #sec);
+
+    INSERT INTO poc_security_supervisor_assignment (officer_username, supervisor_username)
+    SELECT TOP 10 username, @sup FROM #sec WHERE username <> @sup ORDER BY rn;
+
+    DROP TABLE #sec;
+    FETCH NEXT FROM locs INTO @sec_start, @sec_end;
+END
+
+CLOSE locs; DEALLOCATE locs;
+        ]]></sql>
+    </changeSet>
+
+    <!-- ── 019-3 : Gatekeeper supervisors for new locations ─────────────────── -->
+    <changeSet id="019-3" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+DECLARE @loc_cfg TABLE (gk_start INT, gk_end INT);
+INSERT INTO @loc_cfg VALUES (22,41),(42,61),(62,81),(82,101),(102,121);
+
+DECLARE @gk_start INT, @gk_end INT, @sup VARCHAR(100);
+
+DECLARE locs CURSOR FOR SELECT gk_start, gk_end FROM @loc_cfg;
+OPEN locs;
+FETCH NEXT FROM locs INTO @gk_start, @gk_end;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    CREATE TABLE #gk (rn INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(100));
+
+    INSERT INTO #gk (username)
+    SELECT u.ID_
+    FROM   ACT_ID_USER u
+    JOIN   ACT_ID_MEMBERSHIP m ON m.USER_ID_ = u.ID_
+    WHERE  m.GROUP_ID_ = 'Porters'
+      AND  TRY_CAST(SUBSTRING(u.ID_, 11, 10) AS INT) BETWEEN @gk_start AND @gk_end
+    ORDER  BY NEWID();
+
+    SELECT TOP 1 @sup = username FROM #gk ORDER BY rn;
+
+    DELETE FROM poc_gatekeeper_supervisor_assignment
+    WHERE porter_username IN (SELECT username FROM #gk);
+
+    INSERT INTO poc_gatekeeper_supervisor_assignment (porter_username, supervisor_username)
+    SELECT TOP 10 username, @sup FROM #gk WHERE username <> @sup ORDER BY rn;
+
+    DROP TABLE #gk;
+    FETCH NEXT FROM locs INTO @gk_start, @gk_end;
+END
+
+CLOSE locs; DEALLOCATE locs;
+        ]]></sql>
+    </changeSet>
+
+</databaseChangeLog>

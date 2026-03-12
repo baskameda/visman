@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="012-1-location-table" author="visitor-poc">
+        <comment>Create poc_location table for facility location management.</comment>
+        <createTable tableName="poc_location">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_poc_location" nullable="false"/>
+            </column>
+            <column name="name" type="NVARCHAR(200)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="NVARCHAR(2000)"/>
+            <column name="latitude"  type="DECIMAL(15,10)"/>
+            <column name="longitude" type="DECIMAL(15,10)"/>
+            <column name="created_at" type="DATETIME2" defaultValueComputed="GETDATE()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="012-2-default-location" author="visitor-poc">
+        <comment>Insert the default Commanders Desk location.</comment>
+        <insert tableName="poc_location">
+            <column name="name"        value="Commanders Desk"/>
+            <column name="description" value="we will rule the world"/>
+            <column name="latitude"    valueNumeric="52.5651235881"/>
+            <column name="longitude"   valueNumeric="13.4142473369"/>
+        </insert>
+    </changeSet>
+
+    <changeSet id="012-3-entrance-location-fk" author="visitor-poc">
+        <comment>Add location_id FK to poc_entrance and migrate existing rows to the default location.</comment>
+        <addColumn tableName="poc_entrance">
+            <column name="location_id" type="BIGINT"/>
+        </addColumn>
+        <sql>UPDATE poc_entrance SET location_id = (SELECT TOP 1 id FROM poc_location ORDER BY id)</sql>
+        <addNotNullConstraint tableName="poc_entrance" columnName="location_id" columnDataType="BIGINT"/>
+        <addForeignKeyConstraint
+            baseTableName="poc_entrance"
+            baseColumnNames="location_id"
+            constraintName="fk_entrance_location"
+            referencedTableName="poc_location"
+            referencedColumnNames="id"/>
+    </changeSet>
+
+</databaseChangeLog>

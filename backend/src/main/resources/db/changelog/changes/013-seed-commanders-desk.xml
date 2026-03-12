@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Seed data for the "Commanders Desk" location.
+        Creates 10 entrances, 10 inviters, 20 gatekeepers, 5 security officers.
+        Assigns 2 gatekeepers per entrance (gatekeeper2-21 evenly distributed).
+
+        Password storage: Operaton/Camunda 7 default SHA-1 hex digest of the plain password.
+        SQL Server HASHBYTES('SHA1', varchar_literal) produces the same bytes as
+        Java's DigestUtils.sha1Hex() for pure-ASCII passwords.
+        Pattern: username = [role][N], initial password = [role][N]123
+        (e.g. inviter4 / inviter4123, gatekeeper7 / gatekeeper7123).
+
+        NOTE: the login page's resetPasswordToUserId mechanism will override these
+        to username=password on first load, for quick-fill convenience.
+    -->
+
+    <!-- ── 013-1 : 10 entrances at Commanders Desk ──────────────────────────── -->
+
+    <changeSet id="013-1" author="seed">
+        <sql splitStatements="true" endDelimiter=";">
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('Main Entrance',
+                    'Primary public access point for visiting guests',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('North Gate',
+                    'Staff and authorised vehicle access, north perimeter',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('South Gate',
+                    'Emergency services and logistics access, south perimeter',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('East Wing Lobby',
+                    'Client reception and conference room level',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('West Wing Lobby',
+                    'Operations and research departments access',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('Loading Dock Alpha',
+                    'Inbound goods and deliveries, ground floor',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('Loading Dock Bravo',
+                    'Outbound shipments and collections, ground floor',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('Executive Floor',
+                    'Restricted zone — board and C-level offices, 12th floor',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('Server Room Corridor',
+                    'High-security infrastructure and data centre access',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+
+            INSERT INTO poc_entrance (entrance_name, description, location_id)
+            VALUES ('Staff Canteen',
+                    'Internal staff access, basement level',
+                    (SELECT TOP 1 id FROM poc_location WHERE name = 'Commanders Desk'));
+        </sql>
+    </changeSet>
+
+    <!-- ── 013-2 : 7 inviters (inviter5 – inviter11) — inviter2–4 pre-exist ─── -->
+
+    <changeSet id="013-2" author="seed">
+        <sql splitStatements="true" endDelimiter=";">
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('inviter5',  1, 'Luca',      'Bianchi',   'luca.bianchi@example.com',     LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'inviter5123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('inviter6',  1, 'Charlotte', 'Dupont',    'charlotte.dupont@example.com', LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'inviter6123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('inviter7',  1, 'James',     'OBrien',    'james.obrien@example.com',     LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'inviter7123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('inviter8',  1, 'Yuki',      'Tanaka',    'yuki.tanaka@example.com',      LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'inviter8123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('inviter9',  1, 'Ana',       'Garcia',    'ana.garcia@example.com',       LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'inviter9123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('inviter10', 1, 'Nikolai',   'Petrov',    'nikolai.petrov@example.com',   LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'inviter10123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('inviter11', 1, 'Amira',     'Hassan',    'amira.hassan@example.com',     LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'inviter11123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('inviter5',  'Invitors');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('inviter6',  'Invitors');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('inviter7',  'Invitors');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('inviter8',  'Invitors');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('inviter9',  'Invitors');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('inviter10', 'Invitors');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('inviter11', 'Invitors');
+        </sql>
+    </changeSet>
+
+    <!-- ── 013-3 : 17 gatekeepers (gatekeeper5 – gatekeeper21) — gk2–4 pre-exist -->
+
+    <changeSet id="013-3" author="seed">
+        <sql splitStatements="true" endDelimiter=";">
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper5',  1, 'Elena',    'Volkova',   'elena.volkova@example.com',    LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper5123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper6',  1, 'David',    'Chen',      'david.chen@example.com',       LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper6123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper7',  1, 'Fatima',   'Nkosi',     'fatima.nkosi@example.com',     LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper7123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper8',  1, 'Roberto',  'Esposito',  'roberto.esposito@example.com', LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper8123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper9',  1, 'Ingrid',   'Larsen',    'ingrid.larsen@example.com',    LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper9123'),  2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper10', 1, 'Carlos',   'Mendoza',   'carlos.mendoza@example.com',   LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper10123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper11', 1, 'Priya',    'Sharma',    'priya.sharma@example.com',     LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper11123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper12', 1, 'Stefan',   'Kowalski',  'stefan.kowalski@example.com',  LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper12123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper13', 1, 'Nadia',    'Osei',      'nadia.osei@example.com',       LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper13123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper14', 1, 'Vincent',  'Leblanc',   'vincent.leblanc@example.com',  LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper14123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper15', 1, 'Aiko',     'Nakamura',  'aiko.nakamura@example.com',    LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper15123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper16', 1, 'Omar',     'Farouk',    'omar.farouk@example.com',      LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper16123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper17', 1, 'Laura',    'Becker',    'laura.becker@example.com',     LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper17123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper18', 1, 'Samuel',   'Okafor',    'samuel.okafor@example.com',    LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper18123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper19', 1, 'Maja',     'Johansson', 'maja.johansson@example.com',   LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper19123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper20', 1, 'Diego',    'Morales',   'diego.morales@example.com',    LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper20123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('gatekeeper21', 1, 'Hana',     'Novak',     'hana.novak@example.com',       LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'gatekeeper21123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper5',  'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper6',  'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper7',  'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper8',  'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper9',  'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper10', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper11', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper12', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper13', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper14', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper15', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper16', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper17', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper18', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper19', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper20', 'Porters');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('gatekeeper21', 'Porters');
+        </sql>
+    </changeSet>
+
+    <!-- ── 013-4 : 2 security officers (security5 – security6) — sec2–4 pre-exist -->
+
+    <changeSet id="013-4" author="seed">
+        <sql splitStatements="true" endDelimiter=";">
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('security5', 1, 'Mei-Ling',  'Zhou',      'meiling.zhou@example.com',    LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'security5123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_USER (ID_, REV_, FIRST_, LAST_, EMAIL_, PWD_, SALT_, LOCK_EXP_TIME_, ATTEMPTS_, PICTURE_ID_)
+            VALUES ('security6', 1, 'Boris',     'Volkov',    'boris.volkov@example.com',    LOWER(CONVERT(VARCHAR(40), HASHBYTES('SHA1', 'security6123'), 2)), NULL, NULL, NULL, NULL);
+
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('security5', 'Security');
+            INSERT INTO ACT_ID_MEMBERSHIP (USER_ID_, GROUP_ID_) VALUES ('security6', 'Security');
+        </sql>
+    </changeSet>
+
+    <!-- ── 013-5 : Assign 2 gatekeepers per entrance (evenly distributed) ───── -->
+    <!--
+        Mapping:
+          Main Entrance       → gatekeeper2,  gatekeeper3
+          North Gate          → gatekeeper4,  gatekeeper5
+          South Gate          → gatekeeper6,  gatekeeper7
+          East Wing Lobby     → gatekeeper8,  gatekeeper9
+          West Wing Lobby     → gatekeeper10, gatekeeper11
+          Loading Dock Alpha  → gatekeeper12, gatekeeper13
+          Loading Dock Bravo  → gatekeeper14, gatekeeper15
+          Executive Floor     → gatekeeper16, gatekeeper17
+          Server Room Corridor→ gatekeeper18, gatekeeper19
+          Staff Canteen       → gatekeeper20, gatekeeper21
+    -->
+
+    <changeSet id="013-5" author="seed">
+        <sql splitStatements="true" endDelimiter=";">
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper2'  FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Main Entrance'        AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper3'  FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Main Entrance'        AND l.name = 'Commanders Desk';
+
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper4'  FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'North Gate'           AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper5'  FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'North Gate'           AND l.name = 'Commanders Desk';
+
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper6'  FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'South Gate'           AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper7'  FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'South Gate'           AND l.name = 'Commanders Desk';
+
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper8'  FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'East Wing Lobby'      AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper9'  FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'East Wing Lobby'      AND l.name = 'Commanders Desk';
+
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper10' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'West Wing Lobby'      AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper11' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'West Wing Lobby'      AND l.name = 'Commanders Desk';
+
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper12' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Loading Dock Alpha'   AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper13' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Loading Dock Alpha'   AND l.name = 'Commanders Desk';
+
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper14' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Loading Dock Bravo'   AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper15' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Loading Dock Bravo'   AND l.name = 'Commanders Desk';
+
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper16' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Executive Floor'      AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper17' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Executive Floor'      AND l.name = 'Commanders Desk';
+
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper18' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Server Room Corridor' AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper19' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Server Room Corridor' AND l.name = 'Commanders Desk';
+
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper20' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Staff Canteen'        AND l.name = 'Commanders Desk';
+            INSERT INTO poc_entrance_gatekeeper (entrance_id, gatekeeper_username)
+            SELECT e.id, 'gatekeeper21' FROM poc_entrance e JOIN poc_location l ON l.id = e.location_id WHERE e.entrance_name = 'Staff Canteen'        AND l.name = 'Commanders Desk';
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

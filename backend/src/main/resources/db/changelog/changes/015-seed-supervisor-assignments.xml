@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Seed supervisor assignments for the three role hierarchies.
+
+        Strategy per role:
+          - Shuffle all members of the group randomly (ORDER BY NEWID()).
+          - The first member in the shuffled list becomes the supervisor.
+          - Up to 10 of the remaining members become supervisees.
+
+        Each changeset is split by role so that a failure in one does not
+        prevent the others from being marked as executed on the next run.
+        Each block deletes existing seed rows first so it is safe to re-run
+        if a previous attempt left partial data.
+
+        Tables:
+          poc_supervisor_assignment            inviter_username (PK), supervisor_username
+          poc_security_supervisor_assignment   officer_username (PK), supervisor_username
+          poc_gatekeeper_supervisor_assignment porter_username  (PK), supervisor_username
+    -->
+
+    <!-- ── 015-1 : Inviter supervisor ──────────────────────────────────────── -->
+    <changeSet id="015-1" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+CREATE TABLE #inv (rn INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(100) NOT NULL);
+
+INSERT INTO #inv (username)
+SELECT u.ID_
+FROM   ACT_ID_USER u
+JOIN   ACT_ID_MEMBERSHIP m ON m.USER_ID_ = u.ID_
+WHERE  m.GROUP_ID_ = 'Invitors'
+ORDER  BY NEWID();
+
+DECLARE @inv_sup VARCHAR(100);
+SELECT TOP 1 @inv_sup = username FROM #inv ORDER BY rn;
+
+-- Clear any partial data from a previous failed run
+DELETE FROM poc_supervisor_assignment;
+
+INSERT INTO poc_supervisor_assignment (inviter_username, supervisor_username)
+SELECT TOP 10 username, @inv_sup
+FROM   #inv
+WHERE  username <> @inv_sup
+ORDER  BY rn;
+
+DROP TABLE #inv;
+        ]]></sql>
+    </changeSet>
+
+    <!-- ── 015-2 : Security supervisor ─────────────────────────────────────── -->
+    <changeSet id="015-2" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+CREATE TABLE #sec (rn INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(100) NOT NULL);
+
+INSERT INTO #sec (username)
+SELECT u.ID_
+FROM   ACT_ID_USER u
+JOIN   ACT_ID_MEMBERSHIP m ON m.USER_ID_ = u.ID_
+WHERE  m.GROUP_ID_ = 'Security'
+ORDER  BY NEWID();
+
+DECLARE @sec_sup VARCHAR(100);
+SELECT TOP 1 @sec_sup = username FROM #sec ORDER BY rn;
+
+DELETE FROM poc_security_supervisor_assignment;
+
+INSERT INTO poc_security_supervisor_assignment (officer_username, supervisor_username)
+SELECT TOP 10 username, @sec_sup
+FROM   #sec
+WHERE  username <> @sec_sup
+ORDER  BY rn;
+
+DROP TABLE #sec;
+        ]]></sql>
+    </changeSet>
+
+    <!-- ── 015-3 : Gatekeeper supervisor ────────────────────────────────────── -->
+    <changeSet id="015-3" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+CREATE TABLE #gk (rn INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(100) NOT NULL);
+
+INSERT INTO #gk (username)
+SELECT u.ID_
+FROM   ACT_ID_USER u
+JOIN   ACT_ID_MEMBERSHIP m ON m.USER_ID_ = u.ID_
+WHERE  m.GROUP_ID_ = 'Porters'
+ORDER  BY NEWID();
+
+DECLARE @gk_sup VARCHAR(100);
+SELECT TOP 1 @gk_sup = username FROM #gk ORDER BY rn;
+
+DELETE FROM poc_gatekeeper_supervisor_assignment;
+
+INSERT INTO poc_gatekeeper_supervisor_assignment (porter_username, supervisor_username)
+SELECT TOP 10 username, @gk_sup
+FROM   #gk
+WHERE  username <> @gk_sup
+ORDER  BY rn;
+
+DROP TABLE #gk;
+        ]]></sql>
+    </changeSet>
+
+</databaseChangeLog>

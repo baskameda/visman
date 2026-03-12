@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Add 5 city locations with downtown coordinates and seed 10 entrances each.
+        Each location mirrors the Commanders Desk entrance structure.
+    -->
+
+    <!-- ── 016-1 : 5 locations ───────────────────────────────────────────────── -->
+    <changeSet id="016-1" author="seed">
+        <sql splitStatements="true" endDelimiter=";">
+            INSERT INTO poc_location (name, description, latitude, longitude, created_at)
+            VALUES ('Paris',       'European headquarters — Paris city centre', 48.8566,   2.3522, GETDATE());
+
+            INSERT INTO poc_location (name, description, latitude, longitude, created_at)
+            VALUES ('Rome',        'Southern European office — Rome city centre', 41.9028,  12.4964, GETDATE());
+
+            INSERT INTO poc_location (name, description, latitude, longitude, created_at)
+            VALUES ('London',      'Northern European hub — London city centre',  51.5074,  -0.1278, GETDATE());
+
+            INSERT INTO poc_location (name, description, latitude, longitude, created_at)
+            VALUES ('Beijing',     'Asia-Pacific headquarters — Beijing city centre', 39.9042, 116.4074, GETDATE());
+
+            INSERT INTO poc_location (name, description, latitude, longitude, created_at)
+            VALUES ('Los Angeles', 'Americas west-coast hub — Los Angeles downtown', 34.0522, -118.2437, GETDATE());
+        </sql>
+    </changeSet>
+
+    <!-- ── 016-2 : 10 entrances per location (50 total) ─────────────────────── -->
+    <changeSet id="016-2" author="seed" runOnChange="false">
+        <sql splitStatements="false"><![CDATA[
+SET NOCOUNT ON;
+
+DECLARE @loc_id   BIGINT;
+DECLARE @loc_name VARCHAR(100);
+
+DECLARE locs CURSOR FOR
+    SELECT id, name FROM poc_location
+    WHERE  name IN ('Paris', 'Rome', 'London', 'Beijing', 'Los Angeles')
+    ORDER  BY name;
+
+OPEN locs;
+FETCH NEXT FROM locs INTO @loc_id, @loc_name;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    INSERT INTO poc_entrance (entrance_name, description, location_id) VALUES
+        ('Main Entrance',         'Primary public access point for visiting guests',              @loc_id),
+        ('North Gate',            'Staff and authorised vehicle access, north perimeter',         @loc_id),
+        ('South Gate',            'Emergency services and logistics access, south perimeter',     @loc_id),
+        ('East Wing Lobby',       'Client reception and conference room level',                   @loc_id),
+        ('West Wing Lobby',       'Operations and research departments access',                   @loc_id),
+        ('Loading Dock Alpha',    'Inbound goods and deliveries, ground floor',                   @loc_id),
+        ('Loading Dock Bravo',    'Outbound shipments and collections, ground floor',             @loc_id),
+        ('Executive Floor',       'Restricted zone — board and C-level offices, 12th floor',     @loc_id),
+        ('Server Room Corridor',  'High-security infrastructure and data centre access',          @loc_id),
+        ('Staff Canteen',         'Internal staff access, basement level',                        @loc_id);
+
+    FETCH NEXT FROM locs INTO @loc_id, @loc_name;
+END
+
+CLOSE locs;
+DEALLOCATE locs;
+        ]]></sql>
+    </changeSet>
+
+</databaseChangeLog>
